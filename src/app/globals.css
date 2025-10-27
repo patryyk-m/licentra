@@ -1,26 +1,85 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --radius: var(--radius);
+  --radius-lg: calc(var(--radius) - 2px);
+  --radius-md: calc(var(--radius) - 4px);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --radius: 0.625rem;
+    /* Licentra Blue Theme */
+    --background: 216 5% 100%;
+    --foreground: 216 10% 10%;
+    --card: 216 5% 100%;
+    --card-foreground: 216 10% 10%;
+    --popover: 216 5% 100%;
+    --popover-foreground: 216 10% 10%;
+    --primary: 216 100% 50%; /* Licentra Blue #0066FF */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 216 20% 95%;
+    --secondary-foreground: 216 10% 15%;
+    --muted: 216 15% 95%;
+    --muted-foreground: 216 8% 45%;
+    --accent: 216 80% 65%;
+    --accent-foreground: 216 10% 10%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 216 10% 90%;
+    --input: 216 10% 90%;
+    --ring: 216 100% 50%; /* Licentra Blue */
+  }
+
+  .dark {
+    /* Licentra Blue Dark Theme */
+    --background: 216 8% 8%;
+    --foreground: 0 0% 98%;
+    --card: 216 10% 10%;
+    --card-foreground: 0 0% 98%;
+    --popover: 216 10% 10%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 216 100% 50%; /* Licentra Blue #0066FF */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 216 15% 15%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 216 12% 15%;
+    --muted-foreground: 216 5% 65%;
+    --accent: 216 80% 55%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 216 15% 20%;
+    --input: 216 15% 20%;
+    --ring: 216 100% 50%; /* Licentra Blue */
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
 }
