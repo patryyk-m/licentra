@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { Button } from '@/components/ui/button';
 import { Check, Key, Shield, Zap, Terminal } from 'lucide-react';
@@ -17,7 +16,7 @@ export default function Home() {
 
   const fetchUser = async () => {
     try {
-      const response = await fetch('/api/auth/me');
+      const response = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
       const result = await response.json();
       if (result.success) {
         setUser(result.data.user);
@@ -31,8 +30,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Navbar />
-
       <main className="flex-1">
         <section className="relative py-24 px-4 sm:px-6 lg:px-8 overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />

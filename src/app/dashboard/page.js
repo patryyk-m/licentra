@@ -17,7 +17,7 @@ export default function DashboardPage() {
 
   const fetchUser = async () => {
     try {
-      const response = await fetch('/api/auth/me');
+      const response = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
       const result = await response.json();
 
       if (result.success) {
