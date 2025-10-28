@@ -17,7 +17,7 @@ export default function Navbar() {
 
   const fetchUser = async () => {
     try {
-      const response = await fetch('/api/auth/me');
+      const response = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
       const result = await response.json();
 
       if (result.success) {
@@ -61,6 +61,9 @@ export default function Navbar() {
           <div className="hidden md:flex items-center space-x-8">
             <Link href="/dashboard" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               Dashboard
+            </Link>
+            <Link href="/apps" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              Apps
             </Link>
             <Link href="#pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               Pricing
