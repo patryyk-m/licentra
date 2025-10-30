@@ -44,7 +44,7 @@ export default function Home() {
               Built for developers who value simplicity and security.
             </p>
 
-            {!user ? (
+            {!isLoading && !user ? (
               <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
                 <Button asChild size="lg" className="text-lg px-10 h-12">
                   <Link href="/register">Get Started Free</Link>
@@ -53,13 +53,13 @@ export default function Home() {
                   <Link href="/login">Sign In</Link>
                 </Button>
               </div>
-            ) : (
+            ) : !isLoading && user ? (
               <div className="flex justify-center mb-12">
                 <Button asChild size="lg" className="text-lg px-10 h-12">
                   <Link href="/dashboard">Go to Dashboard</Link>
                 </Button>
               </div>
-            )}
+            ) : null}
 
             <div className="flex flex-wrap justify-center gap-8 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">

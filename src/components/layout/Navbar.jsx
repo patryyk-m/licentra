@@ -1,39 +1,64 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
 export default function Navbar() {
   const router = useRouter();
+  const pathname = usePathname();
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    fetchUser();
-  }, []);
-
-  const fetchUser = async () => {
+  const fetchUser = useCallback(async () => {
     try {
       const response = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
       const result = await response.json();
 
-      if (result.success) {
+      if (result.success && result.data?.user) {
         setUser(result.data.user);
+      } else {
+        setUser(null);
       }
     } catch (error) {
       console.error('Error fetching user:', error);
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchUser();
+  }, [pathname, fetchUser]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchUser();
+    };
+    
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchUser();
+      }
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchUser]);
 
   const handleLogout = async () => {
     try {
       const response = await fetch('/api/auth/logout', {
         method: 'POST',
+        credentials: 'include',
       });
       const result = await response.json();
 

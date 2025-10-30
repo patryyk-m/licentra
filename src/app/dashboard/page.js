@@ -35,23 +35,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      const response = await fetch('/api/auth/logout', {
-        method: 'POST',
-      });
-      const result = await response.json();
-
-      if (result.success) {
-        toast.success('Logged out successfully');
-        router.push('/login');
-      }
-    } catch (error) {
-      console.error('Logout error:', error);
-      toast.error('An error occurred during logout');
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -67,14 +50,9 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold">Licentra Dashboard</h1>
-            <p className="text-muted-foreground">Welcome back, {user.username}!</p>
-          </div>
-          <Button onClick={handleLogout} variant="outline">
-            Logout
-          </Button>
+        <div>
+          <h1 className="text-3xl font-bold">Licentra Dashboard</h1>
+          <p className="text-muted-foreground">Welcome back, {user.username}!</p>
         </div>
 
         <Card>
