@@ -172,7 +172,7 @@ export default function AppsPage() {
             <SortableContext items={apps.map((a) => a.id)} strategy={rectSortingStrategy}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {apps.map((app) => (
-                  <AppCard key={app.id} app={app} onChanged={fetchApps} />
+                  <AppCard key={app.id} app={app} onChanged={fetchApps} userRole={user?.role} />
                 ))}
               </div>
             </SortableContext>

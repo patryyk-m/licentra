@@ -7,7 +7,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
 
-export default function AppCard({ app, onChanged }) {
+export default function AppCard({ app, onChanged, userRole }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: app.id });
 
   const style = {
@@ -54,7 +54,9 @@ export default function AppCard({ app, onChanged }) {
       </CardHeader>
       <CardContent className="flex gap-2">
         <Button asChild variant="outline"><Link href={`/apps/${app.id}`}>App Settings</Link></Button>
-        <Button variant="outline" disabled>Manage Licenses</Button>
+        <Button asChild variant="outline" disabled={!userRole || !['developer', 'admin'].includes(userRole)}>
+          <Link href={`/apps/${app.id}/licenses`}>Manage Licenses</Link>
+        </Button>
         <Button variant="outline" disabled>Manage Redistributors</Button>
         <Button variant="destructive" className="bg-red-600 hover:bg-red-700" onClick={pauseOrDelete}>Delete</Button>
       </CardContent>
