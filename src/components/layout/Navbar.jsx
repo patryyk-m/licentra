@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
+import { User, Settings, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Navbar() {
@@ -11,6 +13,7 @@ export default function Navbar() {
   const pathname = usePathname();
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const fetchUser = useCallback(async () => {
     try {
@@ -54,6 +57,18 @@ export default function Navbar() {
     };
   }, [fetchUser]);
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (userMenuOpen && !event.target.closest('.user-menu-container')) {
+        setUserMenuOpen(false);
+      }
+    };
+    if (userMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [userMenuOpen]);
+
   const handleLogout = async () => {
     try {
       const response = await fetch('/api/auth/logout', {
@@ -65,6 +80,7 @@ export default function Navbar() {
       if (result.success) {
         toast.success('Logged out successfully');
         setUser(null);
+        setUserMenuOpen(false);
         router.push('/login');
       }
     } catch (error) {
@@ -109,11 +125,49 @@ export default function Navbar() {
             {isLoading ? (
               <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             ) : user ? (
-              <div className="flex items-center space-x-4">
-                <span className="text-sm text-muted-foreground">{user.username}</span>
-                <Button onClick={handleLogout} variant="outline" size="sm">
-                  Logout
+              <div className="relative user-menu-container">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="gap-2"
+                >
+                  <User className="w-4 h-4" />
+                  <span className="hidden sm:inline">{user.username}</span>
                 </Button>
+                {userMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="absolute right-0 mt-2 w-48 rounded-lg border bg-background shadow-lg z-50"
+                  >
+                    <div className="p-2">
+                      <Link
+                        href="#profile"
+                        className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted text-sm"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        <User className="w-4 h-4" />
+                        Profile
+                      </Link>
+                      <Link
+                        href="#settings"
+                        className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted text-sm"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        <Settings className="w-4 h-4" />
+                        Settings
+                      </Link>
+                      <button
+                        onClick={handleLogout}
+                        className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted text-sm w-full text-left text-red-500"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Sign out
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
               </div>
             ) : (
               <>
