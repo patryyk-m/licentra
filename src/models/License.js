@@ -22,9 +22,21 @@ const LicenseSchema = new Schema(
       maxlength: 500,
       trim: true,
     },
-    hwid: {
-      type: String,
-      default: null,
+    hwids: {
+      type: [String],
+      default: [],
+      validate: {
+        validator: function(v) {
+          return v.length <= 5;
+        },
+        message: 'maximum 5 hwids allowed per license',
+      },
+    },
+    hwidLimit: {
+      type: Number,
+      min: 1,
+      max: 5,
+      default: 1,
     },
     hwidLocked: {
       type: Boolean,
@@ -46,6 +58,10 @@ const LicenseSchema = new Schema(
 
 LicenseSchema.index({ appId: 1, status: 1 });
 LicenseSchema.index({ appId: 1, createdAt: -1 });
+
+if (process.env.NODE_ENV === 'development' && mongoose.models.License) {
+  delete mongoose.models.License;
+}
 
 const License = mongoose.models.License || mongoose.model('License', LicenseSchema);
 export default License;
