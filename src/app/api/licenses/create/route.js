@@ -35,7 +35,17 @@ export async function POST(req) {
 
     await connectDB();
     const body = await req.json();
-    const { appId, count, mask, charset, expiryUnit, expiryDuration, note, hwidLock } = body || {};
+    const {
+      appId,
+      count,
+      mask,
+      charset,
+      expiryUnit,
+      expiryDuration,
+      note,
+      hwidLock,
+      hwidLimit,
+    } = body || {};
 
     if (!appId || !count || !mask || !charset) {
       return NextResponse.json(
@@ -63,6 +73,21 @@ export async function POST(req) {
     const expiryDate = expiryDuration ? calculateExpiryDate(expiryUnit, expiryDuration) : null;
     const generatedKeys = [];
     const hwidLockedValue = hwidLock === true || hwidLock === 'true' || hwidLock === 1;
+    let normalizedHwidLimit;
+    if (hwidLockedValue) {
+      if (hwidLimit === undefined || hwidLimit === null || hwidLimit === '') {
+        normalizedHwidLimit = 1;
+      } else {
+        const parsed = Number(hwidLimit);
+        if (!Number.isFinite(parsed) || parsed < 1 || parsed > 5) {
+          return NextResponse.json(
+            { success: false, message: 'hwid limit must be between 1 and 5 when hwid lock is enabled' },
+            { status: 400 }
+          );
+        }
+        normalizedHwidLimit = Math.floor(parsed);
+      }
+    }
 
     for (let i = 0; i < count; i++) {
       const plainKey = generateLicenseKey(mask, charset);
@@ -71,8 +96,9 @@ export async function POST(req) {
         appId,
         key: plainKey,
         note: note || '',
-        hwid: null, // will be set when license is activated (if hwidLocked is true)
+        hwids: [], // will be populated when license is activated (if hwidLocked is true)
         hwidLocked: hwidLockedValue, // true if HWID lock is enabled during creation
+        hwidLimit: normalizedHwidLimit,
         expiryDate,
         status: 'active',
       });

@@ -37,15 +37,16 @@ export async function GET(req) {
 
     const licenses = await License.find({ appId, status: 'active' }).sort({ createdAt: -1 }).lean();
 
-    const csvRows = ['License Key,Status,Created,Expiry,HWID Locked,HWID,Note'];
+    const csvRows = ['License Key,Status,Created,Expiry,HWID Locked,HWID Limit,HWIDs,Note'];
     for (const l of licenses) {
       const key = l.key || '';
       const created = l.createdAt ? new Date(l.createdAt).toISOString().split('T')[0] : '';
       const expiry = l.expiryDate ? new Date(l.expiryDate).toISOString().split('T')[0] : '';
       const hwidLocked = l.hwidLocked ? 'Yes' : 'No';
-      const hwid = l.hwid || '';
+      const hwidLimit = l.hwidLocked ? (l.hwidLimit ?? 1) : '';
+      const hwids = (l.hwids || []).join(';');
       const note = (l.note || '').replace(/,/g, ';');
-      csvRows.push(`${key},${l.status},${created},${expiry},${hwidLocked},${hwid},${note}`);
+      csvRows.push(`${key},${l.status},${created},${expiry},${hwidLocked},${hwidLimit},${hwids},${note}`);
     }
 
     const csv = csvRows.join('\n');

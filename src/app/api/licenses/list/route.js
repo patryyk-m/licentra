@@ -36,18 +36,21 @@ export async function GET(req) {
 
     const licenses = await License.find({ appId }).sort({ createdAt: -1 }).lean();
 
-    const sanitized = licenses.map((l) => ({
-      id: l._id.toString(),
-      key: l.key || '',
-      note: l.note || '',
-      hwid: l.hwid || null,
-      hwidLocked: l.hwidLocked === true,
-      expiryDate: l.expiryDate || null,
-      status: l.status,
-      createdAt: l.createdAt,
-      updatedAt: l.updatedAt,
-      isExpired: l.expiryDate ? new Date(l.expiryDate) < new Date() : false,
-    }));
+    const sanitized = licenses.map((l) => {
+      return {
+        id: l._id.toString(),
+        key: l.key || '',
+        note: l.note || '',
+        hwids: Array.isArray(l.hwids) ? l.hwids : [],
+        hwidLocked: l.hwidLocked === true,
+        hwidLimit: l.hwidLimit ?? null,
+        expiryDate: l.expiryDate || null,
+        status: l.status,
+        createdAt: l.createdAt,
+        updatedAt: l.updatedAt,
+        isExpired: l.expiryDate ? new Date(l.expiryDate) < new Date() : false,
+      };
+    });
 
     return NextResponse.json({ success: true, data: { licenses: sanitized } });
   } catch (error) {
