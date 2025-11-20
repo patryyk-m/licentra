@@ -6,6 +6,21 @@ import License from '@/models/License';
 import { verifyPassword } from '@/lib/crypto';
 import mongoose from 'mongoose';
 
+const MAX_HWIDS = 5;
+
+const clampHwidLimit = (value) => {
+  if (value === undefined || value === null) return 1;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.min(Math.max(Math.floor(parsed), 1), MAX_HWIDS);
+};
+
+const resolveEffectiveLimit = (licenseDoc) => {
+  if (!licenseDoc) return MAX_HWIDS;
+  const configuredLimit = clampHwidLimit(licenseDoc.hwidLimit);
+  return licenseDoc.hwidLocked ? configuredLimit : MAX_HWIDS;
+};
+
 const responseInvalid = (reason) =>
   NextResponse.json({
     success: true,
@@ -21,6 +36,7 @@ export async function POST(req) {
     const appId = body?.appId?.trim();
     const apiSecret = body?.apiSecret?.trim();
     const licenseKey = body?.licenseKey?.trim();
+    const hwid = body?.hwid?.trim();
 
     if (!appId || !apiSecret || !licenseKey) {
       return NextResponse.json(
@@ -58,7 +74,7 @@ export async function POST(req) {
     const license = await License.findOne({
       appId: app._id,
       key: licenseKey,
-    }).lean();
+    });
 
     if (!license) {
       return responseInvalid('license_not_found');
@@ -72,20 +88,66 @@ export async function POST(req) {
       return responseInvalid('license_expired');
     }
 
+    const effectiveLimit = resolveEffectiveLimit(license);
+
+    // add hwid if provided and theres room
+    let refreshedLicense = null;
+    if (hwid) {
+      const currentHwids = Array.isArray(license.hwids) ? [...license.hwids] : [];
+
+      if (!currentHwids.includes(hwid)) {
+        if (currentHwids.length >= effectiveLimit) {
+          return responseInvalid('hwid_limit_reached');
+        }
+
+        license.hwids = [...currentHwids, hwid];
+        license.markModified('hwids');
+        const savedLicense = await license.save();
+        refreshedLicense = savedLicense.toObject();
+      }
+    }
+
+    if (!refreshedLicense) {
+      refreshedLicense = await License.findById(license._id).lean();
+    }
+
+    const updatedHwids = Array.isArray(refreshedLicense?.hwids) ? refreshedLicense.hwids : [];
+    const configuredLimit = clampHwidLimit(refreshedLicense?.hwidLimit);
+
+    // if hwid lock is enabled, enforce hwid validation
+    if (refreshedLicense.hwidLocked) {
+      if (updatedHwids.length > 0) {
+        // hwids already exist, must provide matching hwid
+        if (!hwid) {
+          return responseInvalid('hwid_required');
+        }
+        if (!updatedHwids.includes(hwid)) {
+          // hwid not in list and couldnt be added (limit reached)
+          return responseInvalid('hwid_mismatch');
+        }
+      } else {
+        // no hwids stored yet, require hwid to be provided
+        if (!hwid) {
+          return responseInvalid('hwid_required');
+        }
+      }
+    }
+    
     return NextResponse.json({
       success: true,
       data: {
         valid: true,
         license: {
-          id: license._id.toString(),
-          key: license.key,
-          note: license.note,
-          status: license.status,
-          expiryDate: license.expiryDate,
-          hwidLocked: license.hwidLocked,
-          hwid: license.hwid,
-          createdAt: license.createdAt,
-          updatedAt: license.updatedAt,
+          id: refreshedLicense._id.toString(),
+          key: refreshedLicense.key,
+          note: refreshedLicense.note,
+          status: refreshedLicense.status,
+          expiryDate: refreshedLicense.expiryDate,
+          hwidLocked: refreshedLicense.hwidLocked,
+          hwidLimit: configuredLimit,
+          hwids: updatedHwids,
+          createdAt: refreshedLicense.createdAt,
+          updatedAt: refreshedLicense.updatedAt,
         },
       },
     });

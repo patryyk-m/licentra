@@ -13,7 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Copy, Download, Trash2 } from 'lucide-react';
+import { Copy, Download, Trash2, Pencil, RotateCcw } from 'lucide-react';
 
 export default function LicensesPage() {
   const params = useParams();
@@ -24,8 +24,11 @@ export default function LicensesPage() {
   const [licenses, setLicenses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingLicense, setEditingLicense] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [creating, setCreating] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
   // Form state
   const [count, setCount] = useState(1);
@@ -35,12 +38,36 @@ export default function LicensesPage() {
   const [expiryUnit, setExpiryUnit] = useState('Days');
   const [expiryDuration, setExpiryDuration] = useState(30);
   const [hwidLock, setHwidLock] = useState(false);
+  const [hwidLimit, setHwidLimit] = useState(1);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshCooldown, setRefreshCooldown] = useState(0);
+  
+  // Edit form state
+  const [editHwidLocked, setEditHwidLocked] = useState(false);
+  const [editHwidLimit, setEditHwidLimit] = useState(1);
+  const [hwidsToClear, setHwidsToClear] = useState(new Set());
+
+  const getDisplayLimit = (license) => {
+    if (!license) return 5;
+    if (!license.hwidLocked) return 5;
+    const parsed = Number(license.hwidLimit);
+    if (!Number.isFinite(parsed)) return 1;
+    return Math.min(Math.max(Math.floor(parsed), 1), 5);
+  };
 
   useEffect(() => {
     if (appId) {
       fetchData();
     }
   }, [appId]);
+
+  useEffect(() => {
+    if (refreshCooldown <= 0) return;
+    const timer = setTimeout(() => {
+      setRefreshCooldown((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [refreshCooldown]);
 
   const fetchData = async () => {
     try {
@@ -76,9 +103,28 @@ export default function LicensesPage() {
     const res = await fetch(`/api/licenses/list?appId=${appId}`, { credentials: 'include' });
     const json = await res.json();
     if (json.success) {
-      setLicenses(json.data.licenses);
+      // ensure hwids is always an array
+      const licenses = json.data.licenses.map(license => ({
+        ...license,
+        hwids: Array.isArray(license.hwids) ? license.hwids : [],
+        hwidLimit: license.hwidLimit ?? null,
+      }));
+      setLicenses(licenses);
     } else {
       toast.error(json.message || 'failed to load licenses');
+    }
+  };
+
+  const handleManualRefresh = async () => {
+    if (isRefreshing || refreshCooldown > 0) return;
+    setIsRefreshing(true);
+    try {
+      await fetchLicenses();
+      setRefreshCooldown(5);
+    } catch (error) {
+      toast.error('failed to refresh licenses');
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -101,6 +147,11 @@ export default function LicensesPage() {
       return;
     }
 
+    if (hwidLock && (hwidLimit < 1 || hwidLimit > 5)) {
+      toast.error('hwid limit must be between 1 and 5');
+      return;
+    }
+
     setCreating(true);
     try {
       const res = await fetch('/api/licenses/create', {
@@ -116,6 +167,7 @@ export default function LicensesPage() {
           expiryDuration,
           note,
           hwidLock,
+          hwidLimit,
         }),
       });
       const json = await res.json();
@@ -129,6 +181,7 @@ export default function LicensesPage() {
         setExpiryUnit('Days');
         setExpiryDuration(30);
         setHwidLock(false);
+        setHwidLimit(1);
         if (json.data?.keys?.length > 0) {
           toast.message('copy your license keys now', {
             description: json.data.keys.slice(0, 3).join(', ') + (json.data.keys.length > 3 ? '...' : ''),
@@ -160,6 +213,82 @@ export default function LicensesPage() {
       }
     } catch (e) {
       toast.error('network error');
+    }
+  };
+
+  const handleEdit = (license) => {
+    setEditingLicense(license);
+    setEditHwidLocked(license.hwidLocked || false);
+    setEditHwidLimit(license.hwidLimit ?? 1);
+    setHwidsToClear(new Set());
+    setIsEditOpen(true);
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    if (!editingLicense) return;
+
+    setUpdating(true);
+    try {
+      const formData = new FormData(e.target);
+      const expiryDate = formData.get('expiryDate') || null;
+      const note = formData.get('note') || '';
+
+      // remove highest index first so the rest stay in place
+      const indicesToClear = Array.from(hwidsToClear).sort((a, b) => b - a);
+      for (const index of indicesToClear) {
+        const res = await fetch(`/api/licenses/update/${editingLicense.id}`, {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clearHwidIndex: index }),
+        });
+        const json = await res.json();
+        if (!json.success) {
+          toast.error(`failed to clear hwid at index ${index}`);
+          setUpdating(false);
+          return;
+        }
+      }
+
+      // update other fields
+      if (editHwidLocked && (editHwidLimit < 1 || editHwidLimit > 5)) {
+        toast.error('hwid limit must be between 1 and 5');
+        setUpdating(false);
+        return;
+      }
+
+      const updateData = {
+        expiryDate: expiryDate || null,
+        hwidLocked: editHwidLocked,
+        note: note,
+        hwidLimit: editHwidLimit,
+      };
+
+      const res = await fetch(`/api/licenses/update/${editingLicense.id}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        const clearedCount = indicesToClear.length;
+        toast.success(clearedCount > 0 ? `license updated, ${clearedCount} hwid(s) cleared` : 'license updated');
+        setIsEditOpen(false);
+        setEditingLicense(null);
+        setEditHwidLocked(false);
+        setEditHwidLimit(1);
+        setHwidsToClear(new Set());
+        await fetchLicenses();
+      } else {
+        toast.error(json.message || 'failed to update');
+      }
+    } catch (e) {
+      toast.error('network error');
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -216,7 +345,7 @@ export default function LicensesPage() {
               <DialogTrigger asChild>
                 <Button disabled={!['developer', 'admin'].includes(user.role)}>+ Create Licenses</Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>License Configuration</DialogTitle>
                 </DialogHeader>
@@ -343,11 +472,25 @@ export default function LicensesPage() {
                       <CardTitle>Hardware ID (HWID) Lock Settings</CardTitle>
                       <CardDescription>lock licenses to specific devices</CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-4">
                       <div className="flex items-center space-x-2">
                         <Checkbox id="hwidLock" checked={hwidLock} onCheckedChange={(checked) => setHwidLock(!!checked)} />
                         <Label htmlFor="hwidLock" className="font-normal">Enable HWID Lock</Label>
                       </div>
+                      {hwidLock && (
+                        <div className="space-y-2">
+                          <Label htmlFor="hwidLimit">Allowed HWIDs</Label>
+                          <Input
+                            id="hwidLimit"
+                            type="number"
+                            min="1"
+                            max="5"
+                            value={hwidLimit}
+                            onChange={(e) => setHwidLimit(Number(e.target.value))}
+                          />
+                          <p className="text-xs text-muted-foreground">allow between 1 and 5 devices per license</p>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
 
@@ -362,6 +505,146 @@ export default function LicensesPage() {
                 </form>
               </DialogContent>
             </Dialog>
+
+            <Dialog
+              open={isEditOpen}
+              onOpenChange={(open) => {
+                setIsEditOpen(open);
+                if (!open) {
+                  setEditingLicense(null);
+                  setEditHwidLocked(false);
+                  setEditHwidLimit(1);
+                  setHwidsToClear(new Set());
+                }
+              }}
+            >
+              <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Edit License</DialogTitle>
+                </DialogHeader>
+                {editingLicense && (
+                  <form key={editingLicense.id} onSubmit={handleUpdate} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-note">Note</Label>
+                      <Textarea
+                        id="edit-note"
+                        name="note"
+                        defaultValue={editingLicense.note || ''}
+                        placeholder="add a note for this license"
+                        rows={3}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-expiry">Expiry Date</Label>
+                      <Input
+                        id="edit-expiry"
+                        name="expiryDate"
+                        type="datetime-local"
+                        defaultValue={
+                          editingLicense.expiryDate
+                            ? new Date(editingLicense.expiryDate).toISOString().slice(0, 16)
+                            : ''
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground">leave empty for no expiry</p>
+                    </div>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">HWID Lock Settings</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="edit-hwidLock"
+                            checked={editHwidLocked}
+                            onCheckedChange={(checked) => setEditHwidLocked(!!checked)}
+                          />
+                          <Label htmlFor="edit-hwidLock" className="font-normal">
+                            Enable
+                          </Label>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-hwidLimit">Allowed HWIDs</Label>
+                          <Input
+                            id="edit-hwidLimit"
+                            type="number"
+                            min="1"
+                            max="5"
+                            value={editHwidLimit}
+                            onChange={(e) => setEditHwidLimit(Number(e.target.value))}
+                            disabled={!editHwidLocked}
+                          />
+                          <p className="text-xs text-muted-foreground">allow 1-5 devices per license when locked</p>
+                        </div>
+                        {editingLicense.hwids && editingLicense.hwids.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-sm text-muted-foreground">
+                              HWIDs ({editingLicense.hwids.length}/{getDisplayLimit(editingLicense)}):
+                            </p>
+                            <div className="space-y-2">
+                              {editingLicense.hwids.map((hwid, index) => (
+                                <div key={index} className="flex items-center justify-between gap-2 p-2 border rounded">
+                                  <span className="font-mono text-xs flex-1 truncate">{hwid}</span>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(hwid);
+                                      toast.success(`hwid ${index + 1} copied`);
+                                    }}
+                                    className="flex items-center gap-1"
+                                  >
+                                    <Copy className="w-3 h-3" />
+                                    Copy
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      const newSet = new Set(hwidsToClear);
+                                      if (newSet.has(index)) {
+                                        newSet.delete(index);
+                                      } else {
+                                        newSet.add(index);
+                                      }
+                                      setHwidsToClear(newSet);
+                                    }}
+                                    className={hwidsToClear.has(index) ? 'bg-destructive/10' : ''}
+                                  >
+                                    {hwidsToClear.has(index) ? 'Will Clear' : 'Clear'}
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setIsEditOpen(false);
+                          setEditingLicense(null);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={updating}>
+                        {updating ? 'Updating...' : 'Update'}
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </DialogContent>
+            </Dialog>
+
             <Button variant="outline" onClick={handleExport} disabled={!['developer', 'admin'].includes(user.role)}>
               <Download className="w-4 h-4 mr-2" />
               Export CSV
@@ -377,6 +660,20 @@ export default function LicensesPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="max-w-sm"
             />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleManualRefresh}
+              disabled={isRefreshing || refreshCooldown > 0}
+              className="flex items-center gap-2"
+            >
+              <RotateCcw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              {isRefreshing
+                ? 'Refreshing...'
+                : refreshCooldown > 0
+                ? `Wait ${refreshCooldown}s`
+                : 'Refresh'}
+            </Button>
           </div>
 
           {filteredLicenses.length === 0 ? (
@@ -417,8 +714,15 @@ export default function LicensesPage() {
                           <div className="text-xs text-muted-foreground mt-1">HWID Lock</div>
                         </div>
                         <div>
-                          <div className="text-sm">{license.hwid || '-'}</div>
-                          <div className="text-xs text-muted-foreground">HWID</div>
+                          {license.hwids && license.hwids.length > 0 ? (
+                            <div className="text-xs font-mono text-muted-foreground">
+                              {license.hwids.length}/{getDisplayLimit(license)} HWID
+                              {license.hwids.length !== 1 ? 's' : ''}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-muted-foreground">-</div>
+                          )}
+                          <div className="text-xs text-muted-foreground">HWIDs</div>
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -433,9 +737,14 @@ export default function LicensesPage() {
                           <Copy className="w-4 h-4" />
                         </Button>
                         {['developer', 'admin'].includes(user.role) && (
-                          <Button variant="outline" size="sm" onClick={() => handleDelete(license.id)}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          <>
+                            <Button variant="outline" size="sm" onClick={() => handleEdit(license)}>
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => handleDelete(license.id)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </>
                         )}
                       </div>
                     </div>
