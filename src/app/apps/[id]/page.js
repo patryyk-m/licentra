@@ -52,6 +52,7 @@ export default function AppDetailPage() {
     setApp(found);
     setName(found.name);
     setDescription(found.description || '');
+    setHasSecret(Boolean(found.hasApiSecret));
   };
 
   const save = async (e) => {
@@ -133,10 +134,18 @@ export default function AppDetailPage() {
                     <Button variant="outline" onClick={() => setShowSecret((s) => !s)}>{showSecret ? 'Hide' : 'Show'}</Button>
                     <Button variant="outline" onClick={() => { navigator.clipboard.writeText(apiSecret); toast.success('copied'); }}>Copy</Button>
                   </div>
+                ) : hasSecret ? (
+                  <p className="text-muted-foreground text-sm">
+                    secret already generated. we only display it right after creation.
+                    click regenerate if you need a new one and store it somewhere safe.
+                  </p>
                 ) : (
                   <p className="text-muted-foreground">no secret generated yet</p>
                 )}
-                <Button onClick={generateOrRegenerate}>{apiSecret ? 'Regenerate Secret' : 'Generate Secret'}</Button>
+                <p className="text-xs text-muted-foreground">
+                  remember to copy the secret immediately — it can&apos;t be recovered later.
+                </p>
+                <Button onClick={generateOrRegenerate}>{hasSecret ? 'Regenerate Secret' : 'Generate Secret'}</Button>
               </CardContent>
             </Card>
           </TabsContent>

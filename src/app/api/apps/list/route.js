@@ -17,7 +17,10 @@ export async function GET(req) {
     await connectDB();
 
     const query = user.role === 'admin' ? { status: { $ne: 'suspended' } } : { ownerId: user.id, status: { $ne: 'suspended' } };
-    const apps = await App.find(query).sort({ sortOrder: 1, createdAt: -1 }).lean();
+    const apps = await App.find(query)
+      .select('+apiSecretHash')
+      .sort({ sortOrder: 1, createdAt: -1 })
+      .lean();
 
     const sanitized = apps.map((a) => ({
       id: a._id.toString(),
@@ -27,6 +30,7 @@ export async function GET(req) {
       sortOrder: a.sortOrder || 0,
       createdAt: a.createdAt,
       updatedAt: a.updatedAt,
+      hasApiSecret: !!a.apiSecretHash,
     }));
 
     return NextResponse.json({ success: true, data: { apps: sanitized } });
