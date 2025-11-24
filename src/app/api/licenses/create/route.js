@@ -4,6 +4,7 @@ import { authenticateUser } from '@/middleware/auth';
 import License from '@/models/License';
 import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { hasAppAccess } from '@/lib/authz';
 
 function generateLicenseKey(mask, charset) {
   let key = '';
@@ -26,10 +27,10 @@ export async function POST(req) {
 
   try {
     const user = await authenticateUser(req);
-    if (!user || !['developer', 'admin'].includes(user.role)) {
+    if (!user) {
       return NextResponse.json(
-        { success: false, message: 'Forbidden: insufficient permissions' },
-        { status: 403 }
+        { success: false, message: 'Unauthorized' },
+        { status: 401 }
       );
     }
 
@@ -66,7 +67,8 @@ export async function POST(req) {
       return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
     }
 
-    if (user.role !== 'admin' && app.ownerId.toString() !== user.id) {
+    const hasAccess = hasAppAccess(app, user);
+    if (!hasAccess) {
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
@@ -95,6 +97,7 @@ export async function POST(req) {
       await License.create({
         appId,
         key: plainKey,
+        createdBy: user.id,
         note: note || '',
         hwids: [], // will be populated when license is activated (if hwidLocked is true)
         hwidLocked: hwidLockedValue, // true if HWID lock is enabled during creation

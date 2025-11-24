@@ -22,6 +22,12 @@ const LicenseSchema = new Schema(
       maxlength: 500,
       trim: true,
     },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
     hwids: {
       type: [String],
       default: [],

@@ -224,7 +224,7 @@ export default function DashboardPage() {
               </motion.div>
             )}
 
-            {user.role === 'redistributor' && (
+            {user.role === 'partner' && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}

@@ -31,7 +31,13 @@ export async function GET(req) {
       return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
     }
 
-    if (user.role !== 'admin' && app.ownerId.toString() !== user.id) {
+    const isAdmin = user.role === 'admin';
+    const isOwner = app.ownerId?.toString() === user.id;
+    const isCollaborator = Array.isArray(user.developerApps)
+      ? user.developerApps.some((appRef) => appRef?.toString() === app._id.toString())
+      : false;
+
+    if (!isAdmin && !isOwner && !isCollaborator) {
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 

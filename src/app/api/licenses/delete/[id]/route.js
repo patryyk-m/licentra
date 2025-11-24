@@ -27,7 +27,13 @@ export async function DELETE(req, { params }) {
     }
 
     const app = license.appId;
-    if (user.role !== 'admin' && app.ownerId.toString() !== user.id) {
+    const isAdmin = user.role === 'admin';
+    const isOwner = app.ownerId?.toString() === user.id;
+    const isCollaborator = Array.isArray(user.developerApps)
+      ? user.developerApps.some((appRef) => appRef?.toString() === app._id.toString())
+      : false;
+
+    if (!isAdmin && !isOwner && !isCollaborator) {
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 

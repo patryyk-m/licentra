@@ -1,6 +1,7 @@
 import { verifyAccessToken } from '../lib/jwt.js';
 import { getAuthCookies } from '../lib/cookies.js';
 import User from '../models/User.js';
+import { normalizeAuthUser } from '../lib/authz.js';
 
 // Middleware to authenticate user from access token
 export async function authenticateUser(req) {
@@ -18,12 +19,28 @@ export async function authenticateUser(req) {
       return null;
     }
 
-    return {
-      id: user._id.toString(),
-      username: user.username,
-      email: user.email,
-      role: user.role,
-    };
+    const normalized = normalizeAuthUser(user);
+
+    const needsRoleUpdate = normalized.role && normalized.role !== user.role;
+
+    if (needsRoleUpdate) {
+      const $set = {};
+
+      if (needsRoleUpdate) {
+        $set.role = normalized.role;
+      }
+
+      const updatePayload = {};
+      if (Object.keys($set).length > 0) {
+        updatePayload.$set = $set;
+      }
+
+      if (Object.keys(updatePayload).length > 0) {
+        await User.updateOne({ _id: user._id }, updatePayload).catch(() => {});
+      }
+    }
+
+    return normalized;
   } catch (error) {
     return null;
   }

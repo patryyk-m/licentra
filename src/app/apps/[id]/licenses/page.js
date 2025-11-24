@@ -343,7 +343,7 @@ export default function LicensesPage() {
           <div className="flex gap-2">
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
-                <Button disabled={!['developer', 'admin'].includes(user.role)}>+ Create Licenses</Button>
+                <Button disabled={!['developer', 'admin', 'partner'].includes(user.role)}>+ Create Licenses</Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
@@ -645,10 +645,12 @@ export default function LicensesPage() {
               </DialogContent>
             </Dialog>
 
-            <Button variant="outline" onClick={handleExport} disabled={!['developer', 'admin'].includes(user.role)}>
-              <Download className="w-4 h-4 mr-2" />
-              Export CSV
-            </Button>
+            {['developer', 'admin'].includes(user.role) && (
+              <Button variant="outline" onClick={handleExport}>
+                <Download className="w-4 h-4 mr-2" />
+                Export CSV
+              </Button>
+            )}
           </div>
         </div>
 

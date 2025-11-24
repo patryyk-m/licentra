@@ -52,7 +52,7 @@ export default function ActivityFeed({ activities = [], userRole, onClear }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">Recent Activity</h3>
-        {userRole !== 'redistributor' && (
+        {userRole !== 'partner' && (
           <Button
             variant="ghost"
             size="sm"

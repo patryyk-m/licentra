@@ -4,6 +4,7 @@ import { connectDB } from '@/lib/db';
 import User from '@/models/User';
 import { verifyPassword } from '@/lib/crypto';
 import { signAccessToken, signRefreshToken } from '@/lib/jwt';
+import { normalizeRole } from '@/lib/roles';
 import { setAuthCookies } from '@/lib/cookies';
 import { checkRateLimit } from '@/lib/ratelimit';
 
@@ -55,8 +56,10 @@ export async function POST(req) {
       );
     }
 
+    const normalizedRole = normalizeRole(user.role);
+
     // Generate tokens
-    const accessToken = signAccessToken({ id: user._id.toString(), role: user.role });
+    const accessToken = signAccessToken({ id: user._id.toString(), role: normalizedRole });
     const refreshToken = signRefreshToken({ id: user._id.toString(), tokenVersion: user.tokenVersion });
 
     // Create response
@@ -66,7 +69,14 @@ export async function POST(req) {
         id: user._id.toString(),
         username: user.username,
         email: user.email,
-        role: user.role,
+        role: normalizedRole,
+        plan: user.plan || 'free',
+        partnerApps: Array.isArray(user.partnerApps)
+          ? user.partnerApps.map((appId) => appId?.toString())
+          : [],
+        developerApps: Array.isArray(user.developerApps)
+          ? user.developerApps.map((appId) => appId?.toString())
+          : [],
       },
     });
 

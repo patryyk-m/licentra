@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
-import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
-import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
+import App from '@/models/App';
+import AppInvite from '@/models/AppInvite';
 
-export async function POST(req, { params }) {
-  const rateLimited = checkRateLimit(req, 60, 1);
+export async function DELETE(req, { params }) {
+  const rateLimited = checkRateLimit(req, 30, 1);
   if (rateLimited) return rateLimited;
 
   try {
@@ -16,39 +15,41 @@ export async function POST(req, { params }) {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = await params;
-    if (!id) {
-      return NextResponse.json({ success: false, message: 'invalid app id' }, { status: 400 });
+    const resolvedParams = await params;
+    const appId = resolvedParams?.id;
+    const inviteId = resolvedParams?.inviteId;
+
+    if (!appId || !inviteId) {
+      return NextResponse.json({ success: false, message: 'invalid request parameters' }, { status: 400 });
     }
 
     await connectDB();
-    const app = await App.findById(id);
+    const app = await App.findById(appId);
     if (!app || app.status === 'suspended') {
       return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
     }
 
-    const isAdmin = user.role === 'admin';
-    const isOwner = app.ownerId?.toString() === user.id;
     const isCollaborator = Array.isArray(user.developerApps)
       ? user.developerApps.some((appRef) => appRef?.toString() === app._id.toString())
       : false;
-
-    if (!isAdmin && !isOwner && !isCollaborator) {
+    const canManage = user.role === 'admin' || app.ownerId?.toString() === user.id || isCollaborator;
+    if (!canManage) {
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
-    const plainSecret = crypto.randomBytes(48).toString('base64url');
-    const apiSecretHash = await bcrypt.hash(plainSecret, 10);
+    const invite = await AppInvite.findById(inviteId);
+    if (!invite || invite.appId?.toString() !== app._id.toString()) {
+      return NextResponse.json({ success: false, message: 'invite not found' }, { status: 404 });
+    }
 
-    app.apiSecretHash = apiSecretHash;
-    await app.save();
+    await AppInvite.deleteOne({ _id: invite._id });
 
     return NextResponse.json({
       success: true,
-      message: 'API secret reset',
-      data: { apiSecret: plainSecret }, // return only once
+      message: 'invite cleared',
     });
   } catch (error) {
+    console.error('delete app invite error:', error);
     return NextResponse.json(
       { success: false, message: 'internal server error' },
       { status: 500 }

@@ -3,7 +3,9 @@ import { connectDB } from '../lib/db.js';
 
 connectDB();
 
-const UserSchema = new mongoose.Schema({
+const { Schema } = mongoose;
+
+const UserSchema = new Schema({
   username: {
     type: String,
     required: true,
@@ -22,10 +24,29 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  plan: {
+    type: String,
+    enum: ['free', 'pro', 'business'],
+    default: 'free',
+  },
   role: {
     type: String,
-    enum: ['developer', 'redistributor', 'admin'],
+    enum: ['developer', 'partner', 'admin'],
     default: 'developer',
+  },
+  developerApps: {
+    type: [{
+      type: Schema.Types.ObjectId,
+      ref: 'App',
+    }],
+    default: [],
+  },
+  partnerApps: {
+    type: [{
+      type: Schema.Types.ObjectId,
+      ref: 'App',
+    }],
+    default: [],
   },
   tokenVersion: {
     type: Number,

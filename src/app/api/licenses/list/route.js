@@ -4,6 +4,8 @@ import { authenticateUser } from '@/middleware/auth';
 import License from '@/models/License';
 import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { ROLE } from '@/lib/roles';
+import { hasAppAccess } from '@/lib/authz';
 
 export async function GET(req) {
   const rateLimited = checkRateLimit(req, 60, 1);
@@ -28,13 +30,26 @@ export async function GET(req) {
       return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
     }
 
-    if (user.role !== 'admin' && app.ownerId.toString() !== user.id) {
-      if (user.role !== 'redistributor') {
-        return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
-      }
+    const developerAppIds = Array.isArray(user.developerApps) ? user.developerApps : [];
+    const partnerAppIds = Array.isArray(user.partnerApps) ? user.partnerApps : [];
+    const hasAccess = hasAppAccess(app, user);
+    const isAdmin = user.role === ROLE.ADMIN;
+    const isOwner = app.ownerId?.toString() === user.id;
+    const isCollaborator = developerAppIds.some((appRef) => appRef?.toString() === app._id.toString());
+    const isPartner = user.role === ROLE.PARTNER &&
+      partnerAppIds.some((appRef) => appRef?.toString() === app._id.toString());
+
+    if (!hasAccess) {
+      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
-    const licenses = await License.find({ appId }).sort({ createdAt: -1 }).lean();
+    const licenseQuery = { appId };
+
+    if (isPartner && !isAdmin && !isOwner && !isCollaborator) {
+      licenseQuery.createdBy = user.id;
+    }
+
+    const licenses = await License.find(licenseQuery).sort({ createdAt: -1 }).lean();
 
     const sanitized = licenses.map((l) => {
       return {

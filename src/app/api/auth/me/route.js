@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { authenticateUser } from '@/middleware/auth';
+import { normalizeRole } from '@/lib/roles';
 
 export async function GET(req) {
   try {
@@ -22,7 +23,14 @@ export async function GET(req) {
           id: user.id,
           username: user.username,
           email: user.email,
-          role: user.role,
+          role: normalizeRole(user.role),
+          plan: user.plan || 'free',
+          partnerApps: Array.isArray(user.partnerApps)
+            ? user.partnerApps.map((appId) => appId?.toString())
+            : [],
+          developerApps: Array.isArray(user.developerApps)
+            ? user.developerApps.map((appId) => appId?.toString())
+            : [],
         },
       },
     });

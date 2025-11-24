@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 
@@ -14,11 +13,11 @@ export default function RegisterPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    accountType: 'developer',
     username: '',
     email: '',
     password: '',
     confirmPassword: '',
+    partnerCode: '',
   });
 
   const handleSubmit = async (e) => {
@@ -66,21 +65,6 @@ export default function RegisterPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="accountType">Account Type</Label>
-              <Select
-                value={formData.accountType}
-                onValueChange={(value) => setFormData({ ...formData, accountType: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select account type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="developer">Developer</SelectItem>
-                  <SelectItem value="redistributor">Redistributor</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
               <Input
                 id="username"
@@ -126,6 +110,20 @@ export default function RegisterPage() {
                 onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                 required
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="partnerCode">Partner Code (optional)</Label>
+              <Input
+                id="partnerCode"
+                type="text"
+                placeholder="Enter partner code if provided"
+                value={formData.partnerCode}
+                onChange={(e) => setFormData({ ...formData, partnerCode: e.target.value })}
+                spellCheck={false}
+              />
+              <p className="text-xs text-muted-foreground">
+                Only partner codes are accepted here. Collaborator invites must be claimed after signup.
+              </p>
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? 'Creating account...' : 'Register'}
