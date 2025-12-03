@@ -117,7 +117,7 @@ export async function POST(req) {
   } catch (error) {
     console.error('Create license error:', error);
     return NextResponse.json(
-      { success: false, message: `internal server error: ${error.message}` },
+      { success: false, message: 'internal server error' },
       { status: 500 }
     );
   }

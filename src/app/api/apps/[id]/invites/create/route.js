@@ -6,7 +6,9 @@ import { checkRateLimit } from '@/lib/ratelimit';
 import App from '@/models/App';
 import User from '@/models/User';
 import AppInvite from '@/models/AppInvite';
-import { getCollaboratorLimit } from '@/lib/plans';
+import { getCollaboratorLimit, getPartnerLimit } from '@/lib/plans';
+import { hasAppAccess } from '@/lib/authz';
+import { cleanupAppInvites } from '@/lib/maintenance';
 
 const MAX_ATTEMPTS = 5;
 
@@ -36,10 +38,17 @@ export async function POST(req, { params }) {
       return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
     }
 
+    const hasAccess = hasAppAccess(app, user);
+    if (!hasAccess) {
+      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+    }
+
     const canManage = user.role === 'admin' || app.ownerId?.toString() === user.id;
     if (!canManage) {
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
+
+    await cleanupAppInvites(app._id);
 
     const body = await req.json().catch(() => ({}));
     const requestedRole = typeof body?.role === 'string' ? body.role.trim().toLowerCase() : 'partner';
@@ -83,6 +92,28 @@ export async function POST(req, { params }) {
             {
               success: false,
               message: `developer invite limit reached for this plan (${collaboratorLimit})`,
+            },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
+    if (targetRole === 'partner') {
+      const owner = await User.findById(app.ownerId).select('plan');
+      const partnerLimit = getPartnerLimit(owner?.plan || 'free');
+
+      if (partnerLimit >= 0) {
+        const partnerCount = await User.countDocuments({
+          role: 'partner',
+          partnerApps: app._id,
+        });
+
+        if (partnerCount >= partnerLimit) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: `partner invite limit reached for this plan (${partnerLimit})`,
             },
             { status: 403 }
           );

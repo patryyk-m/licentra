@@ -4,6 +4,7 @@ import { authenticateUser } from '@/middleware/auth';
 import License from '@/models/License';
 import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { hasAppAccess } from '@/lib/authz';
 
 export async function GET(req) {
   const rateLimited = checkRateLimit(req, 60, 1);
@@ -29,6 +30,11 @@ export async function GET(req) {
     const app = await App.findById(appId);
     if (!app || app.status === 'suspended') {
       return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
+    }
+
+    const hasAccess = hasAppAccess(app, user);
+    if (!hasAccess) {
+      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
     const isAdmin = user.role === 'admin';

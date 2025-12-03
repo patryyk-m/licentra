@@ -3,6 +3,7 @@ import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { hasAppAccess } from '@/lib/authz';
 
 export async function PATCH(req, { params }) {
   const rateLimited = checkRateLimit(req, 60, 1);
@@ -23,6 +24,11 @@ export async function PATCH(req, { params }) {
     const app = await App.findById(id);
     if (!app || app.status === 'suspended') {
       return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
+    }
+
+    const hasAccess = hasAppAccess(app, user);
+    if (!hasAccess) {
+      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
     const isAdmin = user.role === 'admin';

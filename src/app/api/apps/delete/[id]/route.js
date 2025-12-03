@@ -3,6 +3,7 @@ import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { hasAppAccess } from '@/lib/authz';
 
 export async function DELETE(req, { params }) {
   const rateLimited = checkRateLimit(req, 60, 1);
@@ -21,17 +22,19 @@ export async function DELETE(req, { params }) {
 
     await connectDB();
     const app = await App.findById(id);
-    if (!app) {
+    if (!app || app.status === 'suspended') {
       return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
+    }
+
+    const hasAccess = hasAppAccess(app, user);
+    if (!hasAccess) {
+      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
     const isAdmin = user.role === 'admin';
     const isOwner = app.ownerId?.toString() === user.id;
-    const isCollaborator = Array.isArray(user.developerApps)
-      ? user.developerApps.some((appRef) => appRef?.toString() === app._id.toString())
-      : false;
 
-    if (!isAdmin && !isOwner && !isCollaborator) {
+    if (!isAdmin && !isOwner) {
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 

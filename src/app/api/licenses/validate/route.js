@@ -36,7 +36,10 @@ export async function POST(req) {
     const appId = body?.appId?.trim();
     const apiSecret = body?.apiSecret?.trim();
     const licenseKey = body?.licenseKey?.trim();
-    const hwid = body?.hwid?.trim();
+    const normalizedHwid = typeof body?.hwid === 'string'
+      ? body.hwid.trim().replace(/\s+/g, '').slice(0, 128)
+      : '';
+    const hasNormalizedHwid = Boolean(normalizedHwid);
 
     if (!appId || !apiSecret || !licenseKey) {
       return NextResponse.json(
@@ -92,15 +95,15 @@ export async function POST(req) {
 
     // add hwid if provided and theres room
     let refreshedLicense = null;
-    if (hwid) {
+    if (hasNormalizedHwid) {
       const currentHwids = Array.isArray(license.hwids) ? [...license.hwids] : [];
 
-      if (!currentHwids.includes(hwid)) {
+      if (!currentHwids.includes(normalizedHwid)) {
         if (currentHwids.length >= effectiveLimit) {
           return responseInvalid('hwid_limit_reached');
         }
 
-        license.hwids = [...currentHwids, hwid];
+        license.hwids = [...currentHwids, normalizedHwid];
         license.markModified('hwids');
         const savedLicense = await license.save();
         refreshedLicense = savedLicense.toObject();
@@ -112,22 +115,19 @@ export async function POST(req) {
     }
 
     const updatedHwids = Array.isArray(refreshedLicense?.hwids) ? refreshedLicense.hwids : [];
-    const configuredLimit = clampHwidLimit(refreshedLicense?.hwidLimit);
+    const configuredLockLimit = clampHwidLimit(refreshedLicense?.hwidLimit);
 
     // if hwid lock is enabled, enforce hwid validation
     if (refreshedLicense.hwidLocked) {
       if (updatedHwids.length > 0) {
-        // hwids already exist, must provide matching hwid
-        if (!hwid) {
+        if (!hasNormalizedHwid) {
           return responseInvalid('hwid_required');
         }
-        if (!updatedHwids.includes(hwid)) {
-          // hwid not in list and couldnt be added (limit reached)
+        if (!updatedHwids.includes(normalizedHwid)) {
           return responseInvalid('hwid_mismatch');
         }
       } else {
-        // no hwids stored yet, require hwid to be provided
-        if (!hwid) {
+        if (!hasNormalizedHwid) {
           return responseInvalid('hwid_required');
         }
       }
@@ -144,7 +144,7 @@ export async function POST(req) {
           status: refreshedLicense.status,
           expiryDate: refreshedLicense.expiryDate,
           hwidLocked: refreshedLicense.hwidLocked,
-          hwidLimit: configuredLimit,
+          hwidLimit: configuredLockLimit,
           hwids: updatedHwids,
           createdAt: refreshedLicense.createdAt,
           updatedAt: refreshedLicense.updatedAt,

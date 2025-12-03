@@ -106,7 +106,7 @@ export default function Navbar() {
             <Link href="/apps" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               Apps
             </Link>
-            <Link href="#pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               Pricing
             </Link>
             <Link href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">

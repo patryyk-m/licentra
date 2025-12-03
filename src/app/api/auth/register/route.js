@@ -121,10 +121,17 @@ export async function POST(req) {
       await inviteToRedeem.save();
     }
 
+    const tokenSeed = await User.findByIdAndUpdate(
+      user._id,
+      { $inc: { tokenVersion: 1 } },
+      { new: true, select: 'tokenVersion' }
+    );
+    const rotatedTokenVersion = tokenSeed?.tokenVersion ?? (user.tokenVersion ?? 0) + 1;
+
     // Generate tokens
     const normalizedRole = normalizeRole(user.role);
     const accessToken = signAccessToken({ id: user._id.toString(), role: normalizedRole });
-    const refreshToken = signRefreshToken({ id: user._id.toString(), tokenVersion: user.tokenVersion });
+    const refreshToken = signRefreshToken({ id: user._id.toString(), tokenVersion: rotatedTokenVersion });
 
     // Create response
     const response = NextResponse.json({

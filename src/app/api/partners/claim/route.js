@@ -6,6 +6,7 @@ import User from '@/models/User';
 import AppInvite from '@/models/AppInvite';
 import App from '@/models/App';
 import { ROLE } from '@/lib/roles';
+import { getPartnerLimit } from '@/lib/plans';
 
 export async function POST(req) {
   const rateLimited = checkRateLimit(req, 20, 1);
@@ -55,6 +56,26 @@ export async function POST(req) {
         { success: false, message: 'app owners cannot redeem their own partner codes' },
         { status: 400 }
       );
+    }
+
+    const owner = await User.findById(app.ownerId).select('plan');
+    const partnerLimit = getPartnerLimit(owner?.plan || 'free');
+
+    if (partnerLimit >= 0) {
+      const partnerCount = await User.countDocuments({
+        role: ROLE.PARTNER,
+        partnerApps: app._id,
+      });
+
+      if (partnerCount >= partnerLimit) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `partner capacity reached for this plan (${partnerLimit})`,
+          },
+          { status: 403 }
+        );
+      }
     }
 
     const alreadyHasApp = Array.isArray(user.partnerApps)

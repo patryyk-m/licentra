@@ -4,6 +4,8 @@ import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
 import App from '@/models/App';
 import AppInvite from '@/models/AppInvite';
+import { hasAppAccess } from '@/lib/authz';
+import { cleanupAppInvites } from '@/lib/maintenance';
 
 export async function DELETE(req, { params }) {
   const rateLimited = checkRateLimit(req, 30, 1);
@@ -29,13 +31,17 @@ export async function DELETE(req, { params }) {
       return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
     }
 
-    const isCollaborator = Array.isArray(user.developerApps)
-      ? user.developerApps.some((appRef) => appRef?.toString() === app._id.toString())
-      : false;
-    const canManage = user.role === 'admin' || app.ownerId?.toString() === user.id || isCollaborator;
+    const hasAccess = hasAppAccess(app, user);
+    if (!hasAccess) {
+      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+    }
+
+    const canManage = user.role === 'admin' || app.ownerId?.toString() === user.id;
     if (!canManage) {
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
+
+    await cleanupAppInvites(app._id);
 
     const invite = await AppInvite.findById(inviteId);
     if (!invite || invite.appId?.toString() !== app._id.toString()) {

@@ -1,8 +1,20 @@
 import { NextResponse } from 'next/server';
 import { clearAuthCookies } from '@/lib/cookies';
+import { authenticateUser } from '@/middleware/auth';
+import User from '@/models/User';
+import { connectDB } from '@/lib/db';
 
 export async function POST(req) {
   try {
+    const user = await authenticateUser(req);
+    if (user) {
+      await connectDB();
+      await User.updateOne(
+        { _id: user.id },
+        { $inc: { tokenVersion: 1 } }
+      ).catch(() => {});
+    }
+
     const response = NextResponse.json({
       success: true,
       message: 'Logged out successfully',

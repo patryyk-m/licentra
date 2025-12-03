@@ -4,6 +4,7 @@ import { authenticateUser } from '@/middleware/auth';
 import License from '@/models/License';
 import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { hasAppAccess } from '@/lib/authz';
 
 export async function PATCH(req, { params }) {
   const rateLimited = checkRateLimit(req, 60, 1);
@@ -30,6 +31,11 @@ export async function PATCH(req, { params }) {
     }
 
     const app = license.appId;
+    const hasAccess = hasAppAccess(app, user);
+    if (!hasAccess) {
+      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+    }
+
     const isAdmin = user.role === 'admin';
     const isOwner = app.ownerId?.toString() === user.id;
     const isCollaborator = Array.isArray(user.developerApps)

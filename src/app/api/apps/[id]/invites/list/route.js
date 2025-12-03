@@ -5,6 +5,8 @@ import { checkRateLimit } from '@/lib/ratelimit';
 import App from '@/models/App';
 import User from '@/models/User';
 import AppInvite from '@/models/AppInvite';
+import { hasAppAccess } from '@/lib/authz';
+import { cleanupAppInvites } from '@/lib/maintenance';
 
 export async function GET(req, { params }) {
   const rateLimited = checkRateLimit(req, 60, 1);
@@ -28,10 +30,17 @@ export async function GET(req, { params }) {
       return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
     }
 
+    const hasAccess = hasAppAccess(app, user);
+    if (!hasAccess) {
+      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+    }
+
     const canManage = user.role === 'admin' || app.ownerId?.toString() === user.id;
     if (!canManage) {
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
+
+    await cleanupAppInvites(app._id);
 
     const [partners, collaborators, invites] = await Promise.all([
       User.find({

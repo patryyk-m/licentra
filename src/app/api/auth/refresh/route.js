@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
-import { getAuthCookies } from '@/lib/cookies';
-import { verifyRefreshToken } from '@/lib/jwt';
-import { signAccessToken, signRefreshToken } from '@/lib/jwt';
-import { setAuthCookies } from '@/lib/cookies';
+import { getAuthCookies, setAuthCookies } from '@/lib/cookies';
+import { verifyRefreshToken, signAccessToken, signRefreshToken } from '@/lib/jwt';
 import User from '@/models/User';
+import { normalizeRole } from '@/lib/roles';
 
 export async function POST(req) {
   try {
@@ -46,9 +45,17 @@ export async function POST(req) {
       );
     }
 
+    const rotatedUser = await User.findByIdAndUpdate(
+      user._id,
+      { $inc: { tokenVersion: 1 } },
+      { new: true }
+    );
+    const nextTokenVersion = rotatedUser?.tokenVersion ?? user.tokenVersion + 1;
+    const normalizedRole = normalizeRole(rotatedUser?.role || user.role);
+
     // Generate new tokens
-    const newAccessToken = signAccessToken({ id: user._id.toString(), role: user.role });
-    const newRefreshToken = signRefreshToken({ id: user._id.toString(), tokenVersion: user.tokenVersion });
+    const newAccessToken = signAccessToken({ id: user._id.toString(), role: normalizedRole });
+    const newRefreshToken = signRefreshToken({ id: user._id.toString(), tokenVersion: nextTokenVersion });
 
     // Create response
     const response = NextResponse.json({

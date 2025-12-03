@@ -325,7 +325,7 @@ export default function AppDetailPage() {
     if (!appId || !inviteId) return;
     const confirmed = typeof window === 'undefined'
       ? true
-      : window.confirm('Clear this invite code? This removes it from the list.');
+      : window.confirm('Clear this invite code? This permanently deletes the code so no one can redeem it.');
     if (!confirmed) return;
     setClearingInviteId(inviteId);
     try {
@@ -507,7 +507,7 @@ export default function AppDetailPage() {
                     </CardHeader>
                     <CardContent className="flex flex-col gap-3 md:flex-row md:items-center">
                       <div className="text-sm text-muted-foreground flex-1">
-                        <p>Create a single-use code for partners.</p>
+                        <p>Create a single use code for partners.</p>
                         <p className="mt-1">Active codes: {activePartnerInviteCount}</p>
                       </div>
                       <Button onClick={() => createInvite('partner')} disabled={createPartnerInviteLoading || !canManagePartners}>

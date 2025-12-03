@@ -4,6 +4,7 @@ import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
 import App from '@/models/App';
 import User from '@/models/User';
+import { hasAppAccess } from '@/lib/authz';
 
 export async function POST(req, { params }) {
   const rateLimited = checkRateLimit(req, 30, 1);
@@ -39,6 +40,11 @@ export async function POST(req, { params }) {
     const app = await App.findById(appId);
     if (!app || app.status === 'suspended') {
       return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
+    }
+
+    const hasAccess = hasAppAccess(app, user);
+    if (!hasAccess) {
+      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
     if (membershipType === 'collaborator' && app.ownerId?.toString() === memberId) {

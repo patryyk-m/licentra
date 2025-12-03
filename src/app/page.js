@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Footer from '@/components/layout/Footer';
 import { Button } from '@/components/ui/button';
-import { Check, Key, Shield, Zap, Terminal } from 'lucide-react';
+import { Check, Key, Shield, Zap, Terminal, Info } from 'lucide-react';
 
 export default function Home() {
   const [user, setUser] = useState(null);
@@ -212,6 +212,43 @@ export default function Home() {
                   </p>
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="py-16 px-4 sm:px-6 lg:px-8 bg-muted/30">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex flex-col gap-6 rounded-2xl border bg-background p-8 shadow-sm">
+              <div className="flex items-center gap-3">
+                <Info className="w-6 h-6 text-primary" />
+                <div>
+                  <h3 className="text-2xl font-semibold">What data we store</h3>
+                  <p className="text-muted-foreground">
+                    We collect only the information required to run your license management system.
+                  </p>
+                </div>
+              </div>
+              <ul className="space-y-4 text-muted-foreground">
+                <li className="flex gap-3">
+                  <span className="font-semibold text-primary">•</span>
+                  Account basics: email, username, plan and role so we can authenticate you.
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-primary">•</span>
+                  App metadata: names, descriptions and hashed API secrets never the plain values.
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-primary">•</span>
+                  License info: keys, optional notes, expiry settings and HWIDs needed to enforce device limits.
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-primary">•</span>
+                  Operational logs: success/error codes only, without secrets, tokens or personal notes.
+                </li>
+              </ul>
+              <p className="text-sm text-muted-foreground">
+                If you want to remove your data, you can delete your account anytime from the Settings section.
+              </p>
             </div>
           </div>
         </section>
