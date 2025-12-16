@@ -263,7 +263,7 @@ export default function Home() {
                 Join thousands of developers using Licentra to secure their software
               </p>
               <Button asChild size="lg" className="text-lg px-10 h-12">
-                <Link href="/register">Get Started — It's Free</Link>
+                <Link href="/register">Get Started — It&apos;s Free</Link>
               </Button>
             </div>
           </section>

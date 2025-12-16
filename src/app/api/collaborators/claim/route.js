@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server';
 import { authenticateUser } from '@/middleware/auth';
 import { connectDB } from '@/lib/db';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { getCollaboratorRateLimit } from '@/config/ratelimits';
 import User from '@/models/User';
 import App from '@/models/App';
 import AppInvite from '@/models/AppInvite';
 import { getCollaboratorLimit } from '@/lib/plans';
 
 export async function POST(req) {
-  const rateLimited = checkRateLimit(req, 20, 1);
+  const rateLimited = checkRateLimit(req, getCollaboratorRateLimit('claim'));
   if (rateLimited) return rateLimited;
 
   try {

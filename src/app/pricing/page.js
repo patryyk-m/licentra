@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Check, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Footer from '@/components/layout/Footer';
 import { PLAN_LIMITS } from '@/lib/plans';
+import { toast } from 'sonner';
 
 const PLAN_CARDS = [
   {
@@ -16,7 +18,6 @@ const PLAN_CARDS = [
     annual: 0,
     highlight: false,
     badge: null,
-    ctaLabel: 'Get started free',
     ctaHref: '/dashboard',
     ctaVariant: 'outline',
     baseFeatures: [
@@ -57,9 +58,9 @@ const PLAN_CARDS = [
     annual: 24,
     badge: null,
     highlight: false,
-    ctaLabel: 'Start free trial',
+    ctaLabel: 'Get started',
     ctaHref: '/register?plan=business',
-    includesTrial: true,
+    includesTrial: false,
     baseFeatures: [
       'Unlimited applications',
       'Unlimited validations',
@@ -83,7 +84,7 @@ const FAQS = [
   },
   {
     question: 'Is there a free trial?',
-    answer: 'Pro and Business both include a 7-day free trial so your or your team can test the workflow before paying.',
+    answer: 'Pro includes a 7 day free trial so you or your team can test the workflow before paying.',
   },
   {
     question: 'What happens if I exceed my limits?',
@@ -101,10 +102,12 @@ const formatLimit = (value, noun) => {
 };
 
 export default function PricingPage() {
+  const router = useRouter();
   const [billingCycle, setBillingCycle] = useState('monthly');
   const [userPlan, setUserPlan] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isPlanLoading, setIsPlanLoading] = useState(true);
+  const [processingPlanId, setProcessingPlanId] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -188,6 +191,81 @@ export default function PricingPage() {
       };
     });
   }, [billingCycle, userPlan, isLoggedIn]);
+
+  const handlePlanClick = async (planId, planHref) => {
+    // if user is not authenticated, redirect to register
+    if (!isLoggedIn) {
+      if (planId === 'pro') {
+        router.push('/register?plan=pro');
+      } else if (planId === 'business') {
+        router.push('/register?plan=business');
+      } else {
+        router.push(planHref);
+      }
+      return;
+    }
+
+    // if user is authenticated and clicking on paid plan
+    if (planId === 'pro' || planId === 'business') {
+      setProcessingPlanId(planId);
+      try {
+        // check if user already has a subscription
+        const userResponse = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
+        const userResult = await userResponse.json();
+        const hasSubscription = userResult.success && 
+          userResult.data?.user?.subscription?.stripeSubscriptionId &&
+          userResult.data?.user?.plan !== 'free';
+
+        if (hasSubscription) {
+          // user has existing subscription - use change-plan endpoint
+          const response = await fetch('/api/stripe/change-plan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ targetPlan: planId }),
+          });
+
+          const result = await response.json();
+
+          if (result.success) {
+            toast.success(`plan updated to ${planId}`);
+            // refresh page to show updated plan
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+          } else {
+            toast.error(result.message || 'failed to change plan');
+            setProcessingPlanId(null);
+          }
+        } else {
+          // no existing subscription - create checkout
+          const response = await fetch('/api/stripe/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ plan: planId }),
+          });
+
+          const result = await response.json();
+
+          if (result.success && result.data?.url) {
+            // redirect to stripe checkout
+            window.location.href = result.data.url;
+          } else {
+            toast.error(result.message || 'failed to create checkout session');
+            setProcessingPlanId(null);
+          }
+        }
+      } catch (error) {
+        console.error('plan change error:', error);
+        toast.error('network error. failed to process request');
+        setProcessingPlanId(null);
+      }
+    } else {
+      // free plan or other - use href
+      router.push(planHref);
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -274,18 +352,20 @@ export default function PricingPage() {
 
                   <div className="mt-8">
                     <Button
-                      asChild={!plan.isCurrent}
                       variant={plan.highlight ? 'default' : plan.ctaVariant || 'outline'}
-                      disabled={plan.isCurrent || isPlanLoading}
+                      disabled={plan.isCurrent || isPlanLoading || processingPlanId !== null}
                       className="w-full justify-center text-center"
+                      onClick={() => !plan.isCurrent && handlePlanClick(plan.id, plan.ctaHref)}
                     >
                       {plan.isCurrent ? (
                         <span>{plan.buttonLabel}</span>
+                      ) : processingPlanId === plan.id ? (
+                        <span>Processing...</span>
                       ) : (
-                        <Link href={plan.ctaHref} className="flex items-center justify-center gap-2">
+                        <span className="flex items-center justify-center gap-2">
                           {plan.buttonLabel}
                           <ArrowRight className="w-4 h-4" />
-                        </Link>
+                        </span>
                       )}
                     </Button>
                   </div>
@@ -299,7 +379,7 @@ export default function PricingPage() {
           <div className="max-w-4xl mx-auto text-center">
             <h2 className="text-4xl font-bold">Launch faster with Licentra</h2>
             <p className="text-xl text-muted-foreground mt-4">
-              Get help getting started. We'll set you up and answer any questions.
+              Get help getting started. We&apos;ll set you up and answer any questions.
             </p>
             <div className="mt-10 flex justify-center">
               <Button asChild size="lg">

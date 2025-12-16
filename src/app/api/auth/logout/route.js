@@ -3,8 +3,13 @@ import { clearAuthCookies } from '@/lib/cookies';
 import { authenticateUser } from '@/middleware/auth';
 import User from '@/models/User';
 import { connectDB } from '@/lib/db';
+import { checkRateLimit } from '@/lib/ratelimit';
+import { getAuthRateLimit } from '@/config/ratelimits';
 
 export async function POST(req) {
+  const rateLimitResponse = checkRateLimit(req, getAuthRateLimit('logout'));
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const user = await authenticateUser(req);
     if (user) {

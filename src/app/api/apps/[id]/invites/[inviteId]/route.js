@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { getInviteRateLimit } from '@/config/ratelimits';
 import App from '@/models/App';
 import AppInvite from '@/models/AppInvite';
 import { hasAppAccess } from '@/lib/authz';
 import { cleanupAppInvites } from '@/lib/maintenance';
 
 export async function DELETE(req, { params }) {
-  const rateLimited = checkRateLimit(req, 30, 1);
+  const rateLimited = checkRateLimit(req, getInviteRateLimit('delete'));
   if (rateLimited) return rateLimited;
 
   try {

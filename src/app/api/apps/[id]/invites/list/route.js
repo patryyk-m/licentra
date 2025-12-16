@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { getInviteRateLimit } from '@/config/ratelimits';
 import App from '@/models/App';
 import User from '@/models/User';
 import AppInvite from '@/models/AppInvite';
@@ -9,7 +10,7 @@ import { hasAppAccess } from '@/lib/authz';
 import { cleanupAppInvites } from '@/lib/maintenance';
 
 export async function GET(req, { params }) {
-  const rateLimited = checkRateLimit(req, 60, 1);
+  const rateLimited = checkRateLimit(req, getInviteRateLimit('list'));
   if (rateLimited) return rateLimited;
 
   try {

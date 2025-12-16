@@ -1,16 +1,24 @@
 import { NextResponse } from 'next/server';
+import { logRateLimitEvent } from './security-logger';
 
 // Simple in memory rate limiter
 const rateLimitMap = new Map();
 
 // Check rate limit and return if exceeded
-export function checkRateLimit(req, limit = 10, windowMinutes = 1) {
+export function checkRateLimit(req, config) {
+  if (!config || typeof config !== 'object') {
+    console.error('[ratelimit] invalid config provided, using default');
+    config = { limit: 60, windowMinutes: 1 };
+  }
+  
+  const limit = config.limit ?? 60;
+  const window = config.windowMinutes ?? 1;
   const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0] || 
                    req.headers.get('x-real-ip') || 
                    'unknown';
   
   const now = Date.now();
-  const windowMs = windowMinutes * 60 * 1000;
+  const windowMs = window * 60 * 1000;
   
   const record = rateLimitMap.get(clientIp);
   
@@ -31,6 +39,10 @@ export function checkRateLimit(req, limit = 10, windowMinutes = 1) {
   }
   
   if (record.count >= limit) {
+    // Log rate limit event
+    const url = new URL(req.url);
+    logRateLimitEvent(clientIp, url.pathname, req).catch(() => {});
+    
     return NextResponse.json(
       {
         success: false,

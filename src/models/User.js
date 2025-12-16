@@ -52,12 +52,36 @@ const UserSchema = new Schema({
     type: Number,
     default: 0,
   },
+  preferences: {
+    notifications: {
+      loginAlerts: { type: Boolean, default: true },
+      passwordChange: { type: Boolean, default: true },
+      sessionRevoked: { type: Boolean, default: true },
+    },
+    privacy: {
+      consentToProcessing: { type: Boolean, default: false },
+      cookiePreferences: { type: String, enum: ['essential', 'all'], default: 'essential' },
+    },
+  },
+  subscription: {
+    stripeCustomerId: { type: String, default: null },
+    stripeSubscriptionId: { type: String, default: null },
+    status: { 
+      type: String, 
+      enum: ['active', 'trialing', 'past_due', 'canceled', 'unpaid', null],
+      default: null,
+    },
+    currentPeriodEnd: { type: Date, default: null },
+    cancelAtPeriodEnd: { type: Boolean, default: false },
+  },
 }, {
   timestamps: true,
 });
 
 UserSchema.index({ username: 1 }, { unique: true });
 UserSchema.index({ email: 1 }, { unique: true });
+UserSchema.index({ 'subscription.stripeCustomerId': 1 });
+UserSchema.index({ 'subscription.stripeSubscriptionId': 1 });
 
 const User = mongoose.models.User || mongoose.model('User', UserSchema);
 

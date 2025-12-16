@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { getMemberRateLimit } from '@/config/ratelimits';
 import App from '@/models/App';
 import User from '@/models/User';
 import { hasAppAccess } from '@/lib/authz';
 
 export async function POST(req, { params }) {
-  const rateLimited = checkRateLimit(req, 30, 1);
+  const rateLimited = checkRateLimit(req, getMemberRateLimit('remove'));
   if (rateLimited) return rateLimited;
 
   try {

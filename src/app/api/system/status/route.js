@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { getSystemRateLimit } from '@/config/ratelimits';
 import { connectDB } from '@/lib/db';
 import { mockSystemMetrics } from '@/lib/mockData';
 
 export async function GET(req) {
-  const rateLimited = checkRateLimit(req, 60, 1);
+  const rateLimited = checkRateLimit(req, getSystemRateLimit('status'));
   if (rateLimited) return rateLimited;
 
   try {

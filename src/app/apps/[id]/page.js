@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -83,23 +83,7 @@ export default function AppDetailPage() {
     }
   }, [availableTabs, hasFullAppAccess, tab]);
 
-  useEffect(() => {
-    if (appId) {
-      load();
-    }
-  }, [appId]);
-
-  useEffect(() => {
-    fetchCurrentUser();
-  }, []);
-
-  useEffect(() => {
-    if (user?.role === 'partner' && appId && !hasFullAppAccess) {
-      router.replace(`/apps/${appId}/licenses`);
-    }
-  }, [user, hasFullAppAccess, appId, router]);
-
-  const fetchCurrentUser = async () => {
+  const fetchCurrentUser = useCallback(async () => {
     try {
     const res = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
       const json = await res.json();
@@ -111,9 +95,9 @@ export default function AppDetailPage() {
     } catch (error) {
       router.push('/login');
     }
-  };
+  }, [router]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const res = await fetch('/api/apps/list', { credentials: 'include' });
     const json = await res.json();
     if (!json.success) {
@@ -130,7 +114,23 @@ export default function AppDetailPage() {
     setName(found.name);
     setDescription(found.description || '');
     setHasSecret(Boolean(found.hasApiSecret));
-  };
+  }, [appId, router]);
+
+  useEffect(() => {
+    if (appId) {
+      load();
+    }
+  }, [appId, load]);
+
+  useEffect(() => {
+    fetchCurrentUser();
+  }, [fetchCurrentUser]);
+
+  useEffect(() => {
+    if (user?.role === 'partner' && appId && !hasFullAppAccess) {
+      router.replace(`/apps/${appId}/licenses`);
+    }
+  }, [user, hasFullAppAccess, appId, router]);
 
   const save = async (e) => {
     e.preventDefault();
@@ -161,7 +161,7 @@ export default function AppDetailPage() {
     }
   };
 
-  const loadMembers = async () => {
+  const loadMembers = useCallback(async () => {
     if (!appId) return;
     setMembersLoading(true);
     setMembersError('');
@@ -184,13 +184,13 @@ export default function AppDetailPage() {
     } finally {
       setMembersLoading(false);
     }
-  };
+  }, [appId]);
 
   useEffect(() => {
     if (tab === 'invites' && canManagePartners) {
       loadMembers();
     }
-  }, [tab, appId, canManagePartners]);
+  }, [tab, appId, canManagePartners, loadMembers]);
 
   const handleTabChange = (value) => {
     if (!availableTabs.includes(value)) return;

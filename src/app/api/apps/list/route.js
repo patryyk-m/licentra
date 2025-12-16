@@ -3,10 +3,11 @@ import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { getAppRateLimit } from '@/config/ratelimits';
 import { normalizeRole, ROLE } from '@/lib/roles';
 
 export async function GET(req) {
-  const rateLimited = checkRateLimit(req, 60, 1);
+  const rateLimited = checkRateLimit(req, getAppRateLimit('list'));
   if (rateLimited) return rateLimited;
 
   try {

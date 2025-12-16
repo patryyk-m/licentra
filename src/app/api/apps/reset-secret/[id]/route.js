@@ -3,12 +3,13 @@ import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { getAppRateLimit } from '@/config/ratelimits';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { hasAppAccess } from '@/lib/authz';
 
 export async function POST(req, { params }) {
-  const rateLimited = checkRateLimit(req, 60, 1);
+  const rateLimited = checkRateLimit(req, getAppRateLimit('resetSecret'));
   if (rateLimited) return rateLimited;
 
   try {

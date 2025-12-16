@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { getLicenseRateLimit } from '@/config/ratelimits';
 import App from '@/models/App';
 import License from '@/models/License';
 import { verifyPassword } from '@/lib/crypto';
@@ -28,7 +29,7 @@ const responseInvalid = (reason) =>
   });
 
 export async function POST(req) {
-  const rateLimited = checkRateLimit(req, 120, 1);
+  const rateLimited = checkRateLimit(req, getLicenseRateLimit('validate'));
   if (rateLimited) return rateLimited;
 
   try {

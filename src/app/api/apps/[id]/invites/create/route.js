@@ -3,12 +3,15 @@ import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { getInviteRateLimit } from '@/config/ratelimits';
 import App from '@/models/App';
 import User from '@/models/User';
 import AppInvite from '@/models/AppInvite';
 import { getCollaboratorLimit, getPartnerLimit } from '@/lib/plans';
 import { hasAppAccess } from '@/lib/authz';
 import { cleanupAppInvites } from '@/lib/maintenance';
+import { logAccessEvent, SECURITY_EVENTS } from '@/lib/security-logger';
+import { handleApiError } from '@/lib/errors';
 
 const MAX_ATTEMPTS = 5;
 
@@ -17,7 +20,7 @@ function generateCode() {
 }
 
 export async function POST(req, { params }) {
-  const rateLimited = checkRateLimit(req, 30, 1);
+  const rateLimited = checkRateLimit(req, getInviteRateLimit('create'));
   if (rateLimited) return rateLimited;
 
   try {
@@ -40,11 +43,13 @@ export async function POST(req, { params }) {
 
     const hasAccess = hasAppAccess(app, user);
     if (!hasAccess) {
+      logAccessEvent(SECURITY_EVENTS.ACCESS_DENIED, user.id, `app:${app._id}`, req, 'no_app_access').catch(() => {});
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
     const canManage = user.role === 'admin' || app.ownerId?.toString() === user.id;
     if (!canManage) {
+      logAccessEvent(SECURITY_EVENTS.ACCESS_DENIED, user.id, `app:${app._id}:invites`, req, 'insufficient_permissions').catch(() => {});
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
@@ -143,11 +148,7 @@ export async function POST(req, { params }) {
       },
     });
   } catch (error) {
-    console.error('create app invite error:', error);
-    return NextResponse.json(
-      { success: false, message: 'internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'create_app_invite');
   }
 }
 

@@ -7,8 +7,13 @@ import App from '@/models/App';
 import License from '@/models/License';
 import AppInvite from '@/models/AppInvite';
 import { clearAuthCookies } from '@/lib/cookies';
+import { checkRateLimit } from '@/lib/ratelimit';
+import { getAuthRateLimit } from '@/config/ratelimits';
 
 export async function GET(req) {
+  const rateLimitResponse = checkRateLimit(req, getAuthRateLimit('me'));
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const user = await authenticateUser(req);
 
@@ -21,6 +26,18 @@ export async function GET(req) {
         { status: 401 }
       );
     }
+
+    await connectDB();
+    const userDoc = await User.findById(user.id).lean();
+
+    if (!userDoc) {
+      return NextResponse.json(
+        { success: false, message: 'user not found' },
+        { status: 404 }
+      );
+    }
+
+    const subscription = userDoc.subscription || {};
 
     return NextResponse.json({
       success: true,
@@ -37,22 +54,24 @@ export async function GET(req) {
           developerApps: Array.isArray(user.developerApps)
             ? user.developerApps.map((appId) => appId?.toString())
             : [],
+          subscription: {
+            status: subscription.status || null,
+            currentPeriodEnd: subscription.currentPeriodEnd || null,
+            cancelAtPeriodEnd: subscription.cancelAtPeriodEnd || false,
+          },
         },
       },
     });
   } catch (error) {
-    console.error('Me endpoint error:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        message: 'Internal server error',
-      },
-      { status: 500 }
-    );
+    const { handleApiError } = await import('@/lib/errors');
+    return handleApiError(error, 'get_me');
   }
 }
 
 export async function DELETE(req) {
+  const rateLimitResponse = checkRateLimit(req, getAuthRateLimit('delete'));
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const user = await authenticateUser(req);
 
@@ -67,6 +86,49 @@ export async function DELETE(req) {
     }
 
     await connectDB();
+
+    // require password confirmation for account deletion
+    const body = await req.json().catch(() => ({}));
+    const { password } = body;
+
+    if (!password) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'password confirmation required for account deletion',
+        },
+        { status: 400 }
+      );
+    }
+
+    // verify password
+    const userDoc = await User.findById(user.id).select('+passwordHash');
+    if (!userDoc) {
+      return NextResponse.json(
+        { success: false, message: 'user not found' },
+        { status: 404 }
+      );
+    }
+
+    const { verifyPassword } = await import('@/lib/crypto');
+    const isValidPassword = await verifyPassword(password, userDoc.passwordHash);
+    if (!isValidPassword) {
+      return NextResponse.json(
+        { success: false, message: 'incorrect password' },
+        { status: 401 }
+      );
+    }
+
+    // log deletion request
+    const SecurityLog = (await import('@/models/SecurityLog')).default;
+    const { getClientIp, getUserAgent } = await import('@/lib/security-logger');
+    await SecurityLog.create({
+      userId: user.id,
+      event: 'account_deletion_requested',
+      ip: getClientIp(req),
+      userAgent: getUserAgent(req),
+      details: { timestamp: new Date().toISOString() },
+    });
 
     const ownedAppCount = await App.countDocuments({ ownerId: user.id });
     if (ownedAppCount > 0) {
@@ -104,14 +166,8 @@ export async function DELETE(req) {
 
     return response;
   } catch (error) {
-    console.error('Delete account error:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        message: 'Internal server error',
-      },
-      { status: 500 }
-    );
+    const { handleApiError } = await import('@/lib/errors');
+    return handleApiError(error, 'delete_account');
   }
 }
 

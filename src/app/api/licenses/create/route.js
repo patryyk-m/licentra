@@ -4,6 +4,7 @@ import { authenticateUser } from '@/middleware/auth';
 import License from '@/models/License';
 import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { getLicenseRateLimit } from '@/config/ratelimits';
 import { hasAppAccess } from '@/lib/authz';
 
 function generateLicenseKey(mask, charset) {
@@ -22,7 +23,7 @@ function generateLicenseKey(mask, charset) {
 }
 
 export async function POST(req) {
-  const rateLimited = checkRateLimit(req, 60, 1);
+  const rateLimited = checkRateLimit(req, getLicenseRateLimit('create'));
   if (rateLimited) return rateLimited;
 
   try {

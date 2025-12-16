@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,11 +34,15 @@ export default function AppsPage() {
   const canCreateApp = ['developer', 'admin'].includes(user?.role);
   const canReorderApps = canCreateApp || user?.role === 'partner';
 
-  useEffect(() => {
-    fetchUser();
+  const fetchApps = useCallback(async () => {
+    const res = await fetch('/api/apps/list', { credentials: 'include' });
+    const json = await res.json();
+    if (json.success) {
+      setApps(json.data.apps || []);
+    }
   }, []);
 
-  const fetchUser = async () => {
+  const fetchUser = useCallback(async () => {
     try {
       const res = await fetch('/api/auth/me', { credentials: 'include' });
       const json = await res.json();
@@ -53,7 +57,11 @@ export default function AppsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [router, fetchApps]);
+
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
 
   const handleClaimCode = async (e) => {
     e.preventDefault();
@@ -114,16 +122,6 @@ export default function AppsPage() {
       toast.error('network error while applying developer code');
     } finally {
       setIsClaimingDeveloperCode(false);
-    }
-  };
-
-  const fetchApps = async () => {
-    const res = await fetch('/api/apps/list', { credentials: 'include' });
-    const json = await res.json();
-    if (json.success) {
-      setApps(json.data.apps);
-    } else {
-      toast.error(json.message || 'failed to load apps');
     }
   };
 

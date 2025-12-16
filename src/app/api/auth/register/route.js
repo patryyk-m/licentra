@@ -8,6 +8,7 @@ import { hashPassword } from '@/lib/crypto';
 import { signAccessToken, signRefreshToken } from '@/lib/jwt';
 import { setAuthCookies } from '@/lib/cookies';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { getAuthRateLimit } from '@/config/ratelimits';
 
 const registerSchema = z.object({
   username: z.string().min(3).max(30).toLowerCase(),
@@ -28,7 +29,7 @@ const registerSchema = z.object({
 export async function POST(req) {
   try {
     // Check rate limit
-    const rateLimitResponse = checkRateLimit(req, 10, 1);
+    const rateLimitResponse = checkRateLimit(req, getAuthRateLimit('register'));
     if (rateLimitResponse) return rateLimitResponse;
 
     await connectDB();

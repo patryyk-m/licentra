@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -55,21 +55,7 @@ export default function LicensesPage() {
     return Math.min(Math.max(Math.floor(parsed), 1), 5);
   };
 
-  useEffect(() => {
-    if (appId) {
-      fetchData();
-    }
-  }, [appId]);
-
-  useEffect(() => {
-    if (refreshCooldown <= 0) return;
-    const timer = setTimeout(() => {
-      setRefreshCooldown((prev) => Math.max(prev - 1, 0));
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [refreshCooldown]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const userRes = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
       const userJson = await userRes.json();
@@ -91,13 +77,38 @@ export default function LicensesPage() {
         setApp(found);
       }
 
-      await fetchLicenses();
+      const res = await fetch(`/api/licenses/list?appId=${appId}`, { credentials: 'include' });
+      const json = await res.json();
+      if (json.success) {
+        const licenses = json.data.licenses.map(license => ({
+          ...license,
+          hwids: Array.isArray(license.hwids) ? license.hwids : [],
+          hwidLimit: license.hwidLimit ?? null,
+        }));
+        setLicenses(licenses);
+      } else {
+        toast.error(json.message || 'failed to load licenses');
+      }
     } catch (e) {
       router.push('/login');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [appId, router]);
+
+  useEffect(() => {
+    if (appId) {
+      fetchData();
+    }
+  }, [appId, fetchData]);
+
+  useEffect(() => {
+    if (refreshCooldown <= 0) return;
+    const timer = setTimeout(() => {
+      setRefreshCooldown((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [refreshCooldown]);
 
   const fetchLicenses = async () => {
     const res = await fetch(`/api/licenses/list?appId=${appId}`, { credentials: 'include' });

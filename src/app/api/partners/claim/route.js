@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { authenticateUser } from '@/middleware/auth';
 import { connectDB } from '@/lib/db';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { getPartnerRateLimit } from '@/config/ratelimits';
 import User from '@/models/User';
 import AppInvite from '@/models/AppInvite';
 import App from '@/models/App';
@@ -9,7 +10,7 @@ import { ROLE } from '@/lib/roles';
 import { getPartnerLimit } from '@/lib/plans';
 
 export async function POST(req) {
-  const rateLimited = checkRateLimit(req, 20, 1);
+  const rateLimited = checkRateLimit(req, getPartnerRateLimit('claim'));
   if (rateLimited) return rateLimited;
 
   try {

@@ -7,6 +7,9 @@ import { signAccessToken, signRefreshToken } from '@/lib/jwt';
 import { normalizeRole } from '@/lib/roles';
 import { setAuthCookies } from '@/lib/cookies';
 import { checkRateLimit } from '@/lib/ratelimit';
+import { getAuthRateLimit } from '@/config/ratelimits';
+import { logAuthEvent, SECURITY_EVENTS } from '@/lib/security-logger';
+import { handleApiError } from '@/lib/errors';
 
 const loginSchema = z.object({
   emailOrUsername: z.string(),
@@ -16,7 +19,7 @@ const loginSchema = z.object({
 export async function POST(req) {
   try {
     // Check rate limit
-    const rateLimitResponse = checkRateLimit(req, 10, 1);
+    const rateLimitResponse = checkRateLimit(req, getAuthRateLimit('login'));
     if (rateLimitResponse) return rateLimitResponse;
 
     await connectDB();
@@ -34,6 +37,7 @@ export async function POST(req) {
     });
 
     if (!user) {
+      logAuthEvent(SECURITY_EVENTS.LOGIN_FAILURE, null, req, { reason: 'user_not_found' }).catch(() => {});
       return NextResponse.json(
         {
           success: false,
@@ -47,6 +51,7 @@ export async function POST(req) {
     const isValidPassword = await verifyPassword(password, user.passwordHash);
 
     if (!isValidPassword) {
+      logAuthEvent(SECURITY_EVENTS.LOGIN_FAILURE, user._id.toString(), req, { reason: 'invalid_password' }).catch(() => {});
       return NextResponse.json(
         {
           success: false,
@@ -90,6 +95,9 @@ export async function POST(req) {
     // Set cookies
     setAuthCookies(response, accessToken, refreshToken);
 
+    // Log successful login (fire and forget)
+    logAuthEvent(SECURITY_EVENTS.LOGIN_SUCCESS, user._id.toString(), req).catch(() => {});
+
     return response;
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -102,14 +110,7 @@ export async function POST(req) {
       );
     }
 
-    console.error('Login error:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        message: 'Internal server error',
-      },
-      { status: 500 }
-    );
+    return handleApiError(error, 'login');
   }
 }
 

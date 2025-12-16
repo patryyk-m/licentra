@@ -4,8 +4,13 @@ import { getAuthCookies, setAuthCookies } from '@/lib/cookies';
 import { verifyRefreshToken, signAccessToken, signRefreshToken } from '@/lib/jwt';
 import User from '@/models/User';
 import { normalizeRole } from '@/lib/roles';
+import { checkRateLimit } from '@/lib/ratelimit';
+import { getAuthRateLimit } from '@/config/ratelimits';
 
 export async function POST(req) {
+  const rateLimitResponse = checkRateLimit(req, getAuthRateLimit('refresh'));
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     await connectDB();
     const { refreshToken } = getAuthCookies(req);

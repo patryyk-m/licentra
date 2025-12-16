@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -27,11 +27,7 @@ export default function DashboardPage() {
   const [activities, setActivities] = useState([]);
   const [systemMetrics, setSystemMetrics] = useState({});
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       // fetch user
       const userRes = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
@@ -91,8 +87,11 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [router]);
 
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleClearActivity = () => {
     setActivities([]);

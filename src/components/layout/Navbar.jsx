@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { User, Settings, LogOut } from 'lucide-react';
+import { User, Settings, LogOut, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Navbar() {
@@ -143,7 +143,7 @@ export default function Navbar() {
                   >
                     <div className="p-2">
                       <Link
-                        href="#profile"
+                        href="/profile"
                         className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted text-sm"
                         onClick={() => setUserMenuOpen(false)}
                       >
@@ -151,7 +151,15 @@ export default function Navbar() {
                         Profile
                       </Link>
                       <Link
-                        href="#settings"
+                        href="/billing"
+                        className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted text-sm"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        <CreditCard className="w-4 h-4" />
+                        Billing
+                      </Link>
+                      <Link
+                        href="/settings"
                         className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted text-sm"
                         onClick={() => setUserMenuOpen(false)}
                       >
