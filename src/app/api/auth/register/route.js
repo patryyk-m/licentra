@@ -9,6 +9,7 @@ import { signAccessToken, signRefreshToken } from '@/lib/jwt';
 import { setAuthCookies } from '@/lib/cookies';
 import { checkRateLimit } from '@/lib/ratelimit';
 import { getAuthRateLimit } from '@/config/ratelimits';
+import { sendWelcomeEmail } from '@/lib/email';
 
 const registerSchema = z.object({
   username: z.string().min(3).max(30).toLowerCase(),
@@ -150,6 +151,11 @@ export async function POST(req) {
 
     // Set cookies
     setAuthCookies(response, accessToken, refreshToken);
+
+    // send welcome email
+    sendWelcomeEmail(user.email, user.username).catch((error) => {
+      console.error('[register] failed to send welcome email:', error);
+    });
 
     return response;
   } catch (error) {

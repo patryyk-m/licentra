@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-export default function MetricCard({ label, value, icon: Icon, delay = 0, trend, description }) {
+export default function MetricCard({ label, value, icon: Icon, delay = 0, description }) {
   const [displayValue, setDisplayValue] = useState(0);
 
   useEffect(() => {
@@ -53,11 +53,6 @@ export default function MetricCard({ label, value, icon: Icon, delay = 0, trend,
           <div className="p-2 rounded-lg bg-primary/10 dark:bg-primary/20">
             {Icon && <Icon className="w-5 h-5 text-primary" />}
           </div>
-          {trend && (
-            <div className={`text-xs font-medium ${trend > 0 ? 'text-green-500' : 'text-red-500'}`}>
-              {trend > 0 ? '↑' : '↓'} {Math.abs(trend)}%
-            </div>
-          )}
         </div>
         
         <div className="space-y-1">

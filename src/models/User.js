@@ -74,6 +74,10 @@ const UserSchema = new Schema({
     currentPeriodEnd: { type: Date, default: null },
     cancelAtPeriodEnd: { type: Boolean, default: false },
   },
+  passwordReset: {
+    token: { type: String, default: null, select: false },
+    tokenExpiry: { type: Date, default: null },
+  },
 }, {
   timestamps: true,
 });
@@ -82,6 +86,7 @@ UserSchema.index({ username: 1 }, { unique: true });
 UserSchema.index({ email: 1 }, { unique: true });
 UserSchema.index({ 'subscription.stripeCustomerId': 1 });
 UserSchema.index({ 'subscription.stripeSubscriptionId': 1 });
+UserSchema.index({ 'passwordReset.token': 1 }, { sparse: true });
 
 const User = mongoose.models.User || mongoose.model('User', UserSchema);
 

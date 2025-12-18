@@ -7,13 +7,8 @@ import { motion } from 'framer-motion';
 import { AppWindow, Key, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import MetricCard from '@/components/dashboard/MetricCard';
-import ActivityFeed from '@/components/dashboard/ActivityFeed';
-import SystemStatus from '@/components/dashboard/SystemStatus';
-import { mockLicenseGenerations, mockLicenseValidations } from '@/lib/mockData';
-import ActivityCalendar from '@/components/dashboard/ActivityCalendar';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -24,8 +19,6 @@ export default function DashboardPage() {
     totalLicenses: 0,
     apiCalls: 0,
   });
-  const [activities, setActivities] = useState([]);
-  const [systemMetrics, setSystemMetrics] = useState({});
 
   const fetchData = useCallback(async () => {
     try {
@@ -67,20 +60,6 @@ export default function DashboardPage() {
         totalLicenses,
         apiCalls: 1247,
       }));
-
-      // fetch activity
-      const activityRes = await fetch('/api/activity/list', { credentials: 'include' });
-      const activityJson = await activityRes.json();
-      if (activityJson.success) {
-        setActivities(activityJson.data.activities || []);
-      }
-
-      // fetch system status
-      const systemRes = await fetch('/api/system/status', { credentials: 'include' });
-      const systemJson = await systemRes.json();
-      if (systemJson.success) {
-        setSystemMetrics(systemJson.data.metrics || {});
-      }
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('failed to load dashboard data');
@@ -93,10 +72,6 @@ export default function DashboardPage() {
     fetchData();
   }, [fetchData]);
 
-  const handleClearActivity = () => {
-    setActivities([]);
-    toast.success('activity cleared');
-  };
 
   if (isLoading) {
     return (
@@ -132,14 +107,12 @@ export default function DashboardPage() {
             value={stats.activeApps}
             icon={AppWindow}
             delay={0.1}
-            trend={5}
           />
           <MetricCard
             label="Total Licenses"
             value={stats.totalLicenses}
             icon={Key}
             delay={0.2}
-            trend={12}
           />
           <MetricCard
             label="API Calls"
@@ -150,58 +123,9 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* charts and activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* activity calendars */}
-          <div className="lg:col-span-2 space-y-6">
-            <Card className="shadow-sm h-full flex flex-col">
-              <CardHeader>
-                <CardTitle>Activity Overview</CardTitle>
-                <CardDescription>license generation and validation activity</CardDescription>
-              </CardHeader>
-              <CardContent className="overflow-visible flex-1 flex flex-col">
-                <Tabs defaultValue="generations" className="w-full flex-1 flex flex-col">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="generations">License Generations</TabsTrigger>
-                    <TabsTrigger value="validations">License Validations</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="generations" className="mt-6 flex-1">
-                    <ActivityCalendar
-                      data={mockLicenseGenerations}
-                      label="License Generations"
-                      delay={0.1}
-                    />
-                  </TabsContent>
-                  <TabsContent value="validations" className="mt-6 flex-1">
-                    <ActivityCalendar
-                      data={mockLicenseValidations}
-                      label="License Validations"
-                      delay={0.2}
-                    />
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* activity feed */}
-          <Card className="shadow-sm">
-            <CardContent className="pt-6">
-              <ActivityFeed
-                activities={activities}
-                userRole={user.role}
-                onClear={handleClearActivity}
-              />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* system status and role based sections */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <SystemStatus metrics={systemMetrics} delay={0.6} />
-
-          {/* role based content */}
-          <div className="lg:col-span-2 space-y-6">
+        {/* role based content */}
+        <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
+          <div className="space-y-6">
             {user.role === 'developer' && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
