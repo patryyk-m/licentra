@@ -6,6 +6,7 @@ export function setAuthCookies(res, accessToken, refreshToken) {
     secure: isProduction,
     sameSite: 'lax',
     path: '/',
+    ...(isProduction && process.env.COOKIE_DOMAIN && { domain: process.env.COOKIE_DOMAIN }),
   };
 
   // Set access token cookie (15 minutes)
@@ -31,6 +32,7 @@ export function clearAuthCookies(res) {
     secure: isProduction,
     sameSite: 'lax',
     path: '/',
+    ...(isProduction && process.env.COOKIE_DOMAIN && { domain: process.env.COOKIE_DOMAIN }),
   };
 
   res.cookies.set('access_token', '', {

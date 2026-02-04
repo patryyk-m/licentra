@@ -11,6 +11,17 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: '2024-11-20.acacia',
 });
 
+// get base url from request (production) or env (dev) for stripe redirects
+function getBaseUrl(req) {
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
+  if (host && !host.includes('localhost')) {
+    const proto = req.headers.get('x-forwarded-proto') || 'https';
+    return `${proto}://${host}`.replace(/\/$/, '');
+  }
+  const fromEnv = process.env.NEXT_PUBLIC_APP_URL;
+  return (fromEnv || 'https://licentra.dev').replace(/\/$/, '');
+}
+
 export async function POST(req) {
   const rateLimitResponse = checkRateLimit(req, getStripeRateLimit('portal'));
   if (rateLimitResponse) return rateLimitResponse;
@@ -44,7 +55,7 @@ export async function POST(req) {
     // create billing portal session
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/billing`,
+      return_url: `${getBaseUrl(req)}/billing`,
     });
 
     return NextResponse.json({
