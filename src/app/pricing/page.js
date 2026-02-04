@@ -18,6 +18,7 @@ const PLAN_CARDS = [
     annual: 0,
     highlight: false,
     badge: null,
+    ctaLabel: 'Get started',
     ctaHref: '/dashboard',
     ctaVariant: 'outline',
     baseFeatures: [
@@ -84,7 +85,7 @@ const FAQS = [
   },
   {
     question: 'Is there a free trial?',
-    answer: 'Pro includes a 7 day free trial so you or your team can test the workflow before paying.',
+    answer: 'Pro includes a 7 day free trial for new customers only. You can test the workflow before paying.',
   },
   {
     question: 'What happens if I exceed my limits?',
@@ -105,6 +106,8 @@ export default function PricingPage() {
   const router = useRouter();
   const [billingCycle, setBillingCycle] = useState('monthly');
   const [userPlan, setUserPlan] = useState(null);
+  const [currentBillingCycle, setCurrentBillingCycle] = useState(null);
+  const [hasSubscription, setHasSubscription] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isPlanLoading, setIsPlanLoading] = useState(true);
   const [processingPlanId, setProcessingPlanId] = useState(null);
@@ -119,21 +122,42 @@ export default function PricingPage() {
           if (response.status === 401 && isMounted) {
             setUserPlan(null);
             setIsLoggedIn(false);
+            setCurrentBillingCycle(null);
+            setHasSubscription(false);
           }
           return;
         }
 
         const result = await response.json();
         const plan = result?.data?.user?.plan;
+        const subscriptionId = result?.data?.user?.subscription?.stripeSubscriptionId;
         if (isMounted && typeof plan === 'string') {
           setUserPlan(plan.toLowerCase());
           setIsLoggedIn(true);
+          setHasSubscription(!!subscriptionId && plan !== 'free');
+          
+          // fetch billing cycle if user has subscription
+          if (plan !== 'free' && subscriptionId) {
+            try {
+              const billingResponse = await fetch('/api/billing/info', { credentials: 'include', cache: 'no-store' });
+              const billingResult = await billingResponse.json();
+              if (billingResult.success && billingResult.data?.billingCycle) {
+                setCurrentBillingCycle(billingResult.data.billingCycle);
+                // set billing cycle toggle to match current
+                setBillingCycle(billingResult.data.billingCycle);
+              }
+            } catch (error) {
+              console.error('billing info fetch error:', error);
+            }
+          }
         }
       } catch (error) {
         console.error('pricing plan fetch error:', error);
         if (isMounted) {
           setUserPlan(null);
           setIsLoggedIn(false);
+          setCurrentBillingCycle(null);
+          setHasSubscription(false);
         }
       } finally {
         if (isMounted) {
@@ -151,16 +175,60 @@ export default function PricingPage() {
 
   const formattedPlans = useMemo(() => {
     const normalizedPlan = typeof userPlan === 'string' ? userPlan.toLowerCase() : null;
+    // check if user has existing subscription (not eligible for trial)
+    // use hasSubscription state which is more reliable
+    const hasExistingSubscription = hasSubscription || (isLoggedIn && normalizedPlan && normalizedPlan !== 'free');
 
     return PLAN_CARDS.map((plan) => {
-      const isCurrent = isLoggedIn && plan.id === normalizedPlan;
+      // check if this is the current plan AND billing cycle matches
+      const isCurrentPlan = isLoggedIn && plan.id === normalizedPlan;
+      const isCurrentBillingCycle = currentBillingCycle ? billingCycle === currentBillingCycle : false;
+      const isCurrent = isCurrentPlan && (plan.id === 'free' || isCurrentBillingCycle);
+      
       const badgeLabel = isCurrent ? 'Active plan' : plan.badge;
-      const buttonLabel = isCurrent ? 'Current plan' : plan.ctaLabel;
+      // if same plan but different billing cycle, show action button, not "Current plan"
+      let buttonLabel;
+      if (isCurrent) {
+        // plan and billing cycle both match, show current plan
+        buttonLabel = 'Current plan';
+      } else if (isCurrentPlan && plan.id !== 'free') {
+        // same plan, but need to check billing cycle
+        if (currentBillingCycle) {
+          // we know the current billing cycle
+          if (currentBillingCycle === 'monthly' && billingCycle === 'annual') {
+            buttonLabel = 'Switch to annual';
+          } else if (currentBillingCycle === 'annual' && billingCycle === 'monthly') {
+            buttonLabel = 'Switch to monthly';
+          } else {
+            // billing cycles match, should have been caught by isCurrent, but show current plan
+            buttonLabel = 'Current plan';
+          }
+        } else {
+          // currentBillingCycle not loaded yet, but user has this plan, show current plan
+          buttonLabel = 'Current plan';
+        }
+      } else {
+        // different plan or not logged in
+        if (hasExistingSubscription && plan.ctaLabel === 'Start free trial') {
+          // user has subscription, don't show "Start free trial"
+          buttonLabel = 'Get started';
+        } else {
+          buttonLabel = plan.ctaLabel;
+        }
+      }
       const limits = PLAN_LIMITS[plan.id] ?? PLAN_LIMITS.free;
       const limitFeatures = [
         formatLimit(limits.collaborators ?? PLAN_LIMITS.free.collaborators, 'collaborator'),
         formatLimit(limits.partners ?? PLAN_LIMITS.free.partners, 'partner'),
       ];
+
+      // determine if trial should be shown (only for pro, monthly, and new customers)
+      // only show trial if we've confirmed user has no subscription (not still loading)
+      const showTrial = !isPlanLoading && 
+                        plan.includesTrial && 
+                        plan.id === 'pro' && 
+                        billingCycle === 'monthly' && 
+                        !hasExistingSubscription;
 
       if (plan.monthly === 0) {
         return {
@@ -171,6 +239,8 @@ export default function PricingPage() {
           features: [...limitFeatures, ...(plan.baseFeatures || [])],
           displayPrice: 'Free',
           billedText: 'Forever free',
+          showTrial: false,
+          shouldDisableButton: isCurrent,
         };
       }
 
@@ -180,6 +250,11 @@ export default function PricingPage() {
         ? `$${(plan.annual * 12).toLocaleString()} billed annually`
         : 'Billed monthly';
 
+      // also check if billing cycles match (for button disabled state)
+      // if user has this plan, disable button if billing cycles match OR if billing cycle not loaded yet
+      const billingCyclesMatch = currentBillingCycle ? billingCycle === currentBillingCycle : false;
+      const shouldDisableButton = isCurrent || (isCurrentPlan && plan.id !== 'free' && (billingCyclesMatch || !currentBillingCycle));
+
       return {
         ...plan,
         isCurrent,
@@ -188,9 +263,11 @@ export default function PricingPage() {
         features: [...limitFeatures, ...(plan.baseFeatures || [])],
         displayPrice: `$${price}`,
         billedText,
+        showTrial,
+        shouldDisableButton,
       };
     });
-  }, [billingCycle, userPlan, isLoggedIn]);
+  }, [billingCycle, userPlan, isLoggedIn, currentBillingCycle, hasSubscription]);
 
   const handlePlanClick = async (planId, planHref) => {
     // if user is not authenticated, redirect to register
@@ -217,33 +294,78 @@ export default function PricingPage() {
           userResult.data?.user?.plan !== 'free';
 
         if (hasSubscription) {
-          // user has existing subscription - use change-plan endpoint
-          const response = await fetch('/api/stripe/change-plan', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ targetPlan: planId }),
-          });
+          // user has existing subscription, check if they want to change plan or billing cycle
+          const currentPlan = userResult.data?.user?.plan;
+          const isSamePlan = currentPlan === planId;
+          
+          if (isSamePlan) {
+            // same plan, check if they want to change billing cycle
+            // fetch current billing cycle from billing info
+            const billingResponse = await fetch('/api/billing/info', { credentials: 'include', cache: 'no-store' });
+            const billingResult = await billingResponse.json();
+            const currentBillingCycle = billingResult.success && billingResult.data?.billingCycle 
+              ? billingResult.data.billingCycle 
+              : 'monthly';
+            
+            if (currentBillingCycle !== billingCycle) {
+              // change billing cycle
+              const response = await fetch('/api/stripe/change-billing-cycle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ billingCycle }),
+              });
 
-          const result = await response.json();
+              const result = await response.json();
 
-          if (result.success) {
-            toast.success(`plan updated to ${planId}`);
-            // refresh page to show updated plan
-            setTimeout(() => {
-              window.location.reload();
-            }, 1000);
+              if (result.success) {
+                toast.success(`switched to ${billingCycle} billing`);
+                setTimeout(() => {
+                  window.location.reload();
+                }, 1000);
+              } else {
+                toast.error(result.message || 'failed to change billing cycle');
+                setProcessingPlanId(null);
+              }
+              return;
+            } else {
+              // same plan and same billing cycle, do nothing
+              toast.info('you are already on this plan and billing cycle');
+              setProcessingPlanId(null);
+              return;
+            }
           } else {
-            toast.error(result.message || 'failed to change plan');
-            setProcessingPlanId(null);
+            // different plan,use change-plan endpoint
+            const response = await fetch('/api/stripe/change-plan', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ targetPlan: planId }),
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+              toast.success(`plan updated to ${planId}`);
+              setTimeout(() => {
+                window.location.reload();
+              }, 1000);
+            } else {
+              toast.error(result.message || 'failed to change plan');
+              setProcessingPlanId(null);
+            }
+            return;
           }
         } else {
-          // no existing subscription - create checkout
+          // no existing subscription, create checkout
           const response = await fetch('/api/stripe/checkout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ plan: planId }),
+            body: JSON.stringify({ 
+              plan: planId,
+              billingCycle: billingCycle,
+            }),
           });
 
           const result = await response.json();
@@ -262,7 +384,7 @@ export default function PricingPage() {
         setProcessingPlanId(null);
       }
     } else {
-      // free plan or other - use href
+      // free plan or other, use href
       router.push(planHref);
     }
   };
@@ -327,7 +449,7 @@ export default function PricingPage() {
                   </div>
                   <p className="text-sm text-muted-foreground mt-2">{plan.billedText}</p>
                   <div className="mt-2">
-                    {plan.includesTrial ? (
+                    {plan.showTrial ? (
                       <p className="text-sm font-medium text-primary">
                         7-day free trial · no card required
                       </p>
@@ -353,9 +475,9 @@ export default function PricingPage() {
                   <div className="mt-8">
                     <Button
                       variant={plan.highlight ? 'default' : plan.ctaVariant || 'outline'}
-                      disabled={plan.isCurrent || isPlanLoading || processingPlanId !== null}
+                      disabled={(plan.isCurrent || plan.shouldDisableButton) || isPlanLoading || processingPlanId !== null}
                       className="w-full justify-center text-center"
-                      onClick={() => !plan.isCurrent && handlePlanClick(plan.id, plan.ctaHref)}
+                      onClick={() => !plan.isCurrent && !plan.shouldDisableButton && handlePlanClick(plan.id, plan.ctaHref)}
                     >
                       {plan.isCurrent ? (
                         <span>{plan.buttonLabel}</span>
