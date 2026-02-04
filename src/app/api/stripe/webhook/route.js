@@ -106,8 +106,7 @@ export async function POST(req) {
       }
 
       default:
-        // unhandled event type - log but don't error
-        console.log(`[stripe_webhook] unhandled event type: ${event.type}`);
+        break;
     }
 
     return NextResponse.json({ received: true });
@@ -149,11 +148,12 @@ async function handleCheckoutCompleted(session) {
   
   // update user - always set plan on checkout completion
   // even if status is "trialing" (for Pro 7-day trial), we set the plan
+  const periodEnd = toDate(subscription.current_period_end);
   const updated = await updateUserSubscription(userId, {
     stripeSubscriptionId: subscription.id,
     stripeCustomerId: typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id,
     status: mappedStatus,
-    currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+    ...(periodEnd && { currentPeriodEnd: periodEnd }),
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
     plan: targetPlan, // always set plan on checkout completion
   });
@@ -181,9 +181,10 @@ async function handlePaymentSucceeded(invoice) {
   }
 
   // update subscription status
+  const periodEnd = toDate(subscription.current_period_end);
   await updateUserSubscription(user._id.toString(), {
     status: mapStripeStatus(subscription.status),
-    currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+    ...(periodEnd && { currentPeriodEnd: periodEnd }),
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
   });
 }
@@ -206,9 +207,10 @@ async function handlePaymentFailed(invoice) {
   }
 
   // mark as past_due
+  const periodEnd = toDate(subscription.current_period_end);
   await updateUserSubscription(user._id.toString(), {
     status: 'past_due',
-    currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+    ...(periodEnd && { currentPeriodEnd: periodEnd }),
   });
 }
 
@@ -234,11 +236,22 @@ async function handleSubscriptionUpdated(subscription) {
     plan = 'business';
   }
 
-  // update subscription - always update plan if we can determine it
+  // if webhook payload missing current_period_end, fetch full subscription from stripe
+  let periodEnd = toDate(subscription.current_period_end);
+  if (!periodEnd && subscription.id) {
+    try {
+      const full = await stripe.subscriptions.retrieve(subscription.id);
+      periodEnd = toDate(full.current_period_end);
+    } catch (e) {
+      console.error('[stripe_webhook] failed to retrieve subscription:', e.message);
+    }
+  }
+
+  // update subscription - only set currentPeriodEnd when we have valid date
   await updateUserSubscription(user._id.toString(), {
     stripeSubscriptionId: subscription.id,
     status: mapStripeStatus(subscription.status),
-    currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+    ...(periodEnd && { currentPeriodEnd: periodEnd }),
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
     ...(plan ? { plan } : {}), // always update plan if we can determine it
   });
@@ -273,15 +286,15 @@ async function handleSubscriptionDeleted(subscription) {
       });
 
       // update user with new subscription (same plan, different billing cycle)
+      const newPeriodEnd = toDate(newSubscription.current_period_end);
       await updateUserSubscription(user._id.toString(), {
         stripeSubscriptionId: newSubscription.id,
         status: mapStripeStatus(newSubscription.status),
-        currentPeriodEnd: new Date(newSubscription.current_period_end * 1000),
+        ...(newPeriodEnd && { currentPeriodEnd: newPeriodEnd }),
         cancelAtPeriodEnd: false,
         plan: subscription.metadata?.plan || user.plan, // plan stays the same
       });
       
-      console.log(`[stripe_webhook] billing cycle changed to ${changeBillingCycleTo} for user ${user._id}`);
       return;
     } catch (error) {
       console.error('[stripe_webhook] error creating new subscription for billing cycle change:', error);
@@ -309,10 +322,11 @@ async function handleSubscriptionDeleted(subscription) {
         });
 
         // update user with new subscription
+        const downgradePeriodEnd = toDate(newSubscription.current_period_end);
         await updateUserSubscription(user._id.toString(), {
           stripeSubscriptionId: newSubscription.id,
           status: mapStripeStatus(newSubscription.status),
-          currentPeriodEnd: new Date(newSubscription.current_period_end * 1000),
+          ...(downgradePeriodEnd && { currentPeriodEnd: downgradePeriodEnd }),
           cancelAtPeriodEnd: false,
           plan: downgradeTo,
         });
@@ -330,6 +344,13 @@ async function handleSubscriptionDeleted(subscription) {
     plan: 'free',
     cancelAtPeriodEnd: false,
   });
+}
+
+// safely convert stripe unix timestamp (seconds) to Date - only when valid
+function toDate(timestamp) {
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return null;
+  const d = new Date(timestamp * 1000);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 // map stripe subscription status to our status
@@ -358,7 +379,10 @@ async function updateUserSubscription(userId, updates) {
     updateData['subscription.status'] = updates.status;
   }
   if (updates.currentPeriodEnd) {
-    updateData['subscription.currentPeriodEnd'] = updates.currentPeriodEnd;
+    const d = updates.currentPeriodEnd;
+    if (d instanceof Date && !isNaN(d.getTime())) {
+      updateData['subscription.currentPeriodEnd'] = d;
+    }
   }
   if (updates.cancelAtPeriodEnd !== undefined) {
     updateData['subscription.cancelAtPeriodEnd'] = updates.cancelAtPeriodEnd;
