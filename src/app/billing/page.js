@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -16,7 +16,7 @@ function BillingContent() {
   const [processingAction, setProcessingAction] = useState(null); // track which action is processing
   const success = searchParams.get('success');
 
-  const fetchBillingData = async () => {
+  const fetchBillingData = useCallback(async () => {
     try {
       const response = await fetch('/api/billing/info', { credentials: 'include', cache: 'no-store' });
       if (!response.ok) {
@@ -37,7 +37,7 @@ function BillingContent() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [router]);
 
   useEffect(() => {
     fetchBillingData();
@@ -57,7 +57,7 @@ function BillingContent() {
         clearTimeout(timeout);
       };
     }
-  }, [router, success]);
+  }, [fetchBillingData, success]);
 
   const handleChangePlan = async (targetPlan) => {
     if (processingAction) return;

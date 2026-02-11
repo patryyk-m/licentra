@@ -267,7 +267,7 @@ export default function PricingPage() {
         shouldDisableButton,
       };
     });
-  }, [billingCycle, userPlan, isLoggedIn, currentBillingCycle, hasSubscription]);
+  }, [billingCycle, userPlan, isLoggedIn, currentBillingCycle, hasSubscription, isPlanLoading]);
 
   const handlePlanClick = async (planId, planHref) => {
     // if user is not authenticated, redirect to register
