@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
+import { handleApiError } from '@/lib/errors';
 import { authenticateUser } from '@/middleware/auth';
 import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
@@ -73,10 +74,7 @@ export async function GET(req) {
 
     return NextResponse.json({ success: true, data: { apps: sanitized } });
   } catch (error) {
-    return NextResponse.json(
-      { success: false, message: 'internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'apps_list');
   }
 }
 

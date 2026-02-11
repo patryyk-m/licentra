@@ -6,6 +6,9 @@ import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
 import { getLicenseRateLimit } from '@/config/ratelimits';
 import { hasAppAccess } from '@/lib/authz';
+import { sanitizeObjectId } from '@/lib/sanitize';
+import { logAccessEvent, SECURITY_EVENTS } from '@/lib/security-logger';
+import { handleApiError } from '@/lib/errors';
 
 export async function GET(req) {
   const rateLimited = checkRateLimit(req, getLicenseRateLimit('export'));
@@ -22,7 +25,8 @@ export async function GET(req) {
 
     await connectDB();
     const { searchParams } = new URL(req.url);
-    const appId = searchParams.get('appId');
+    const rawAppId = searchParams.get('appId');
+    const appId = rawAppId ? sanitizeObjectId(rawAppId) : null;
 
     if (!appId) {
       return NextResponse.json({ success: false, message: 'appId required' }, { status: 400 });
@@ -35,6 +39,7 @@ export async function GET(req) {
 
     const hasAccess = hasAppAccess(app, user);
     if (!hasAccess) {
+      logAccessEvent(SECURITY_EVENTS.ACCESS_DENIED, user.id, `app:${app._id}:export`, req, 'no_app_access').catch(() => {});
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
@@ -45,6 +50,7 @@ export async function GET(req) {
       : false;
 
     if (!isAdmin && !isOwner && !isCollaborator) {
+      logAccessEvent(SECURITY_EVENTS.ACCESS_DENIED, user.id, `app:${app._id}:export`, req, 'insufficient_permissions').catch(() => {});
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
@@ -71,11 +77,7 @@ export async function GET(req) {
       },
     });
   } catch (error) {
-    console.error('Export licenses error:', error);
-    return NextResponse.json(
-      { success: false, message: 'internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'licenses_export');
   }
 }
 

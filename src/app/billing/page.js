@@ -87,7 +87,7 @@ function BillingContent() {
       if (!confirmed) return;
     }
 
-    setIsProcessing(true);
+    setProcessingAction('changePlan');
     try {
       const response = await fetch('/api/stripe/change-plan', {
         method: 'POST',
@@ -163,7 +163,7 @@ function BillingContent() {
       console.error('error canceling subscription:', error);
       toast.error('network error. failed to cancel subscription');
     } finally {
-      setIsProcessing(false);
+      setProcessingAction(null);
     }
   };
 

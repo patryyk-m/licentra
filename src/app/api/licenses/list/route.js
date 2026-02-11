@@ -7,6 +7,9 @@ import { checkRateLimit } from '@/lib/ratelimit';
 import { getLicenseRateLimit } from '@/config/ratelimits';
 import { ROLE } from '@/lib/roles';
 import { hasAppAccess } from '@/lib/authz';
+import { sanitizeObjectId } from '@/lib/sanitize';
+import { logAccessEvent, SECURITY_EVENTS } from '@/lib/security-logger';
+import { handleApiError } from '@/lib/errors';
 
 export async function GET(req) {
   const rateLimited = checkRateLimit(req, getLicenseRateLimit('list'));
@@ -20,7 +23,8 @@ export async function GET(req) {
 
     await connectDB();
     const { searchParams } = new URL(req.url);
-    const appId = searchParams.get('appId');
+    const rawAppId = searchParams.get('appId');
+    const appId = rawAppId ? sanitizeObjectId(rawAppId) : null;
 
     if (!appId) {
       return NextResponse.json({ success: false, message: 'appId required' }, { status: 400 });
@@ -41,6 +45,7 @@ export async function GET(req) {
       partnerAppIds.some((appRef) => appRef?.toString() === app._id.toString());
 
     if (!hasAccess) {
+      logAccessEvent(SECURITY_EVENTS.ACCESS_DENIED, user.id, `app:${app._id}:licenses`, req, 'no_app_access').catch(() => {});
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
@@ -70,11 +75,7 @@ export async function GET(req) {
 
     return NextResponse.json({ success: true, data: { licenses: sanitized } });
   } catch (error) {
-    console.error('List licenses error:', error);
-    return NextResponse.json(
-      { success: false, message: 'internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'licenses_list');
   }
 }
 

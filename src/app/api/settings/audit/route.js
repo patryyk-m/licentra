@@ -22,13 +22,17 @@ export async function GET(req) {
     await connectDB();
 
     const { searchParams } = new URL(req.url);
-    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100);
-    const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10), 0);
+    const rawLimit = parseInt(searchParams.get('limit') || '50', 10);
+    const rawOffset = parseInt(searchParams.get('offset') || '0', 10);
+    const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 50, 1), 100);
+    const offset = Math.max(Number.isFinite(rawOffset) ? rawOffset : 0, 0);
 
     // security relevant events only
     const securityEvents = [
       'login_success',
       'login_failure',
+      'register_success',
+      'register_failure',
       'logout',
       'password_changed',
       'all_sessions_revoked',

@@ -8,6 +8,8 @@ import User from '@/models/User';
 import AppInvite from '@/models/AppInvite';
 import { hasAppAccess } from '@/lib/authz';
 import { cleanupAppInvites } from '@/lib/maintenance';
+import { sanitizeObjectId } from '@/lib/sanitize';
+import { handleApiError } from '@/lib/errors';
 
 export async function GET(req, { params }) {
   const rateLimited = checkRateLimit(req, getInviteRateLimit('list'));
@@ -20,7 +22,7 @@ export async function GET(req, { params }) {
     }
 
     const { id } = await params;
-    const appId = id;
+    const appId = id ? sanitizeObjectId(id) : null;
     if (!appId) {
       return NextResponse.json({ success: false, message: 'invalid app id' }, { status: 400 });
     }
@@ -127,11 +129,7 @@ export async function GET(req, { params }) {
       },
     });
   } catch (error) {
-    console.error('app invite list error:', error);
-    return NextResponse.json(
-      { success: false, message: 'internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'invites_list');
   }
 }
 

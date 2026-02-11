@@ -6,6 +6,8 @@ import { getMemberRateLimit } from '@/config/ratelimits';
 import App from '@/models/App';
 import User from '@/models/User';
 import { hasAppAccess } from '@/lib/authz';
+import { sanitizeObjectId } from '@/lib/sanitize';
+import { handleApiError } from '@/lib/errors';
 
 export async function POST(req, { params }) {
   const rateLimited = checkRateLimit(req, getMemberRateLimit('remove'));
@@ -18,13 +20,14 @@ export async function POST(req, { params }) {
     }
 
     const { id } = await params;
-    const appId = id;
+    const appId = id ? sanitizeObjectId(id) : null;
     if (!appId) {
       return NextResponse.json({ success: false, message: 'invalid app id' }, { status: 400 });
     }
 
     const body = await req.json().catch(() => ({}));
-    const memberId = body?.memberId;
+    const rawMemberId = body?.memberId;
+    const memberId = rawMemberId ? sanitizeObjectId(String(rawMemberId)) : null;
     const membershipType = body?.role?.toLowerCase() === 'partner' ? 'partner'
       : body?.role?.toLowerCase() === 'collaborator' || body?.role?.toLowerCase() === 'developer'
         ? 'collaborator'
@@ -116,11 +119,7 @@ export async function POST(req, { params }) {
 
     return NextResponse.json({ success: true, message: 'collaborator removed from app' });
   } catch (error) {
-    console.error('remove member error:', error);
-    return NextResponse.json(
-      { success: false, message: 'internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'members_remove');
   }
 }
 

@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { connectDB } from '@/lib/db';
 import { checkRateLimit } from '@/lib/ratelimit';
 import { getLicenseRateLimit } from '@/config/ratelimits';
 import App from '@/models/App';
 import License from '@/models/License';
 import { verifyPassword } from '@/lib/crypto';
-import mongoose from 'mongoose';
+import { sanitizeObjectId, sanitizeHwid } from '@/lib/sanitize';
+import { handleApiError } from '@/lib/errors';
 
 const MAX_HWIDS = 5;
 
@@ -34,26 +36,29 @@ export async function POST(req) {
 
   try {
     const body = await req.json();
-    const appId = body?.appId?.trim();
-    const apiSecret = body?.apiSecret?.trim();
-    const licenseKey = body?.licenseKey?.trim();
-    const normalizedHwid = typeof body?.hwid === 'string'
-      ? body.hwid.trim().replace(/\s+/g, '').slice(0, 128)
-      : '';
-    const hasNormalizedHwid = Boolean(normalizedHwid);
-
-    if (!appId || !apiSecret || !licenseKey) {
+    const validateSchema = z.object({
+      appId: z.string().min(1).max(64),
+      apiSecret: z.string().min(1).max(256),
+      licenseKey: z.string().min(1).max(256),
+      hwid: z.string().max(256).optional().transform((v) => (v ? sanitizeHwid(v) : null)),
+    });
+    const parsed = validateSchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
         { success: false, message: 'appId, apiSecret and licenseKey are required' },
         { status: 400 }
       );
     }
+    const { appId: rawAppId, apiSecret, licenseKey, hwid: parsedHwid } = parsed.data;
+    const appId = sanitizeObjectId(rawAppId);
+    const normalizedHwid = parsedHwid || '';
+    const hasNormalizedHwid = Boolean(normalizedHwid);
 
-    await connectDB();
-
-    if (!mongoose.Types.ObjectId.isValid(appId)) {
+    if (!appId || !apiSecret || !licenseKey) {
       return responseInvalid('app_not_found');
     }
+
+    await connectDB();
 
     const app = await App.findById(appId).select('+apiSecretHash status ownerId');
     if (!app || app.status === 'suspended') {
@@ -153,14 +158,7 @@ export async function POST(req) {
       },
     });
   } catch (error) {
-    console.error('Validate license error:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        message: 'internal server error',
-      },
-      { status: 500 }
-    );
+    return handleApiError(error, 'licenses_validate');
   }
 }
 

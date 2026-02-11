@@ -4,6 +4,8 @@ import { authenticateUser } from '@/middleware/auth';
 import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
 import { getAppRateLimit } from '@/config/ratelimits';
+import { sanitizeObjectId } from '@/lib/sanitize';
+import { handleApiError } from '@/lib/errors';
 
 export async function POST(req) {
   const rateLimited = checkRateLimit(req, getAppRateLimit('reorder'));
@@ -31,9 +33,16 @@ export async function POST(req) {
       return NextResponse.json({ success: false, message: 'invalid order array' }, { status: 400 });
     }
 
-    const apps = await App.find({ _id: { $in: order } }).select('ownerId');
+    const sanitizedOrder = order
+      .map((id) => (id != null ? sanitizeObjectId(String(id)) : null))
+      .filter(Boolean);
+    if (sanitizedOrder.length !== order.length) {
+      return NextResponse.json({ success: false, message: 'invalid app ids in order' }, { status: 400 });
+    }
 
-    if (apps.length !== order.length) {
+    const apps = await App.find({ _id: { $in: sanitizedOrder } }).select('ownerId');
+
+    if (apps.length !== sanitizedOrder.length) {
       return NextResponse.json({ success: false, message: 'one or more apps not found' }, { status: 400 });
     }
 
@@ -60,17 +69,14 @@ export async function POST(req) {
     }
 
     await Promise.all(
-      order.map((appId, index) =>
+      sanitizedOrder.map((appId, index) =>
         App.findByIdAndUpdate(appId, { sortOrder: index })
       )
     );
 
     return NextResponse.json({ success: true, message: 'sort order updated' });
   } catch (error) {
-    return NextResponse.json(
-      { success: false, message: 'internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'apps_reorder');
   }
 }
 

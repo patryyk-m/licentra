@@ -8,6 +8,7 @@ import AppInvite from '@/models/AppInvite';
 import App from '@/models/App';
 import { ROLE } from '@/lib/roles';
 import { getPartnerLimit } from '@/lib/plans';
+import { handleApiError } from '@/lib/errors';
 
 export async function POST(req) {
   const rateLimited = checkRateLimit(req, getPartnerRateLimit('claim'));
@@ -113,11 +114,7 @@ export async function POST(req) {
       },
     });
   } catch (error) {
-    console.error('partner claim error:', error);
-    return NextResponse.json(
-      { success: false, message: 'internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'partners_claim');
   }
 }
 

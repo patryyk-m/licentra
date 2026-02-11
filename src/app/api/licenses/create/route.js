@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import License from '@/models/License';
@@ -6,6 +7,8 @@ import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
 import { getLicenseRateLimit } from '@/config/ratelimits';
 import { hasAppAccess } from '@/lib/authz';
+import { sanitizeObjectId, sanitizeForDb } from '@/lib/sanitize';
+import { handleApiError } from '@/lib/errors';
 
 function generateLicenseKey(mask, charset) {
   let key = '';
@@ -37,8 +40,27 @@ export async function POST(req) {
 
     await connectDB();
     const body = await req.json();
+    const createSchema = z.object({
+      appId: z.string().min(1),
+      count: z.number().int().min(1).max(50),
+      mask: z.string().min(1).max(64),
+      charset: z.string().min(1).max(128),
+      expiryUnit: z.enum(['Days', 'Weeks', 'Months']).optional(),
+      expiryDuration: z.number().int().min(0).optional(),
+      note: z.string().max(500).optional().default(''),
+      hwidLock: z.union([z.boolean(), z.string(), z.number()]).optional(),
+      hwidLimit: z.number().int().min(1).max(5).optional(),
+    });
+    const parsed = createSchema.safeParse(body);
+    if (!parsed.success) {
+      const msg = parsed.error.errors[0]?.message || 'missing required fields';
+      return NextResponse.json(
+        { success: false, message: msg },
+        { status: 400 }
+      );
+    }
     const {
-      appId,
+      appId: rawAppId,
       count,
       mask,
       charset,
@@ -47,18 +69,12 @@ export async function POST(req) {
       note,
       hwidLock,
       hwidLimit,
-    } = body || {};
+    } = parsed.data;
 
-    if (!appId || !count || !mask || !charset) {
+    const appId = sanitizeObjectId(rawAppId);
+    if (!appId) {
       return NextResponse.json(
-        { success: false, message: 'missing required fields' },
-        { status: 400 }
-      );
-    }
-
-    if (count > 50) {
-      return NextResponse.json(
-        { success: false, message: 'maximum 50 licenses per batch' },
+        { success: false, message: 'invalid app id' },
         { status: 400 }
       );
     }
@@ -92,6 +108,7 @@ export async function POST(req) {
       }
     }
 
+    const safeNote = sanitizeForDb(note, 500) || '';
     for (let i = 0; i < count; i++) {
       const plainKey = generateLicenseKey(mask, charset);
 
@@ -99,7 +116,7 @@ export async function POST(req) {
         appId,
         key: plainKey,
         createdBy: user.id,
-        note: note || '',
+        note: safeNote,
         hwids: [], // will be populated when license is activated (if hwidLocked is true)
         hwidLocked: hwidLockedValue, // true if HWID lock is enabled during creation
         hwidLimit: normalizedHwidLimit,
@@ -116,11 +133,7 @@ export async function POST(req) {
       data: { keys: generatedKeys },
     });
   } catch (error) {
-    console.error('Create license error:', error);
-    return NextResponse.json(
-      { success: false, message: 'internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'licenses_create');
   }
 }
 

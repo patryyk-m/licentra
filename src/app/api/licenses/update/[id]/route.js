@@ -6,6 +6,8 @@ import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
 import { getLicenseRateLimit } from '@/config/ratelimits';
 import { hasAppAccess } from '@/lib/authz';
+import { sanitizeObjectId, sanitizeForDb } from '@/lib/sanitize';
+import { handleApiError } from '@/lib/errors';
 
 export async function PATCH(req, { params }) {
   const rateLimited = checkRateLimit(req, getLicenseRateLimit('update'));
@@ -21,12 +23,13 @@ export async function PATCH(req, { params }) {
     }
 
     const { id } = await params;
-    if (!id) {
+    const licenseId = id ? sanitizeObjectId(id) : null;
+    if (!licenseId) {
       return NextResponse.json({ success: false, message: 'invalid license id' }, { status: 400 });
     }
 
     await connectDB();
-    const license = await License.findById(id).populate('appId');
+    const license = await License.findById(licenseId).populate('appId');
     if (!license) {
       return NextResponse.json({ success: false, message: 'license not found' }, { status: 404 });
     }
@@ -91,21 +94,19 @@ export async function PATCH(req, { params }) {
 
     // update note
     if (body.note !== undefined) {
-      const note = typeof body.note === 'string' ? body.note.trim() : '';
-      if (note.length > 500) {
-        return NextResponse.json({ success: false, message: 'note too long (max 500 characters)' }, { status: 400 });
-      }
-      mongooseUpdate.note = note;
+      const rawNote = typeof body.note === 'string' ? body.note.trim() : '';
+      const note = sanitizeForDb(rawNote, 500);
+      mongooseUpdate.note = note ?? '';
     }
 
     if (Object.keys(mongooseUpdate).length === 0) {
       return NextResponse.json({ success: false, message: 'no updates provided' }, { status: 400 });
     }
     
-    await License.updateOne({ _id: id }, { $set: mongooseUpdate });
+    await License.updateOne({ _id: licenseId }, { $set: mongooseUpdate });
     
     // reload the license to return updated data
-    const updatedLicense = await License.findById(id);
+    const updatedLicense = await License.findById(licenseId);
 
     return NextResponse.json({
       success: true,
@@ -126,11 +127,7 @@ export async function PATCH(req, { params }) {
       },
     });
   } catch (error) {
-    console.error('Update license error:', error);
-    return NextResponse.json(
-      { success: false, message: 'internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'licenses_update');
   }
 }
 

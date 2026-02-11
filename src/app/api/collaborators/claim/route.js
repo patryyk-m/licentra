@@ -7,6 +7,7 @@ import User from '@/models/User';
 import App from '@/models/App';
 import AppInvite from '@/models/AppInvite';
 import { getCollaboratorLimit } from '@/lib/plans';
+import { handleApiError } from '@/lib/errors';
 
 export async function POST(req) {
   const rateLimited = checkRateLimit(req, getCollaboratorRateLimit('claim'));
@@ -110,11 +111,7 @@ export async function POST(req) {
       },
     });
   } catch (error) {
-    console.error('developer claim error:', error);
-    return NextResponse.json(
-      { success: false, message: 'internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'collaborators_claim');
   }
 }
 

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import App from '@/models/App';
+import { handleApiError } from '@/lib/errors';
+import { sanitizeForDb } from '@/lib/sanitize';
 import { checkRateLimit } from '@/lib/ratelimit';
 import { getAppRateLimit } from '@/config/ratelimits';
 
@@ -20,10 +22,12 @@ export async function POST(req) {
 
     await connectDB();
     const body = await req.json();
-    const name = (body?.name || '').trim();
-    const description = (body?.description || '').trim();
+    const rawName = (body?.name || '').trim();
+    const rawDesc = (body?.description || '').trim();
+    const name = sanitizeForDb(rawName, 40);
+    const description = sanitizeForDb(rawDesc, 500) ?? '';
 
-    if (name.length < 2 || name.length > 40) {
+    if (!name || name.length < 2) {
       return NextResponse.json(
         { success: false, message: 'name must be between 2 and 40 characters' },
         { status: 400 }
@@ -32,7 +36,7 @@ export async function POST(req) {
 
     const app = await App.create({
       name,
-      description,
+      description: description || '',
       ownerId: user.id,
       apiSecretHash: '',
       status: 'active',
@@ -53,17 +57,13 @@ export async function POST(req) {
       },
     });
   } catch (error) {
-    console.error('Create app error:', error);
     if (error?.code === 11000) {
       return NextResponse.json(
         { success: false, message: 'an app with this name already exists' },
         { status: 409 }
       );
     }
-    return NextResponse.json(
-      { success: false, message: 'internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'apps_create');
   }
 }
 

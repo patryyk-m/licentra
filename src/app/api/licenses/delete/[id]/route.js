@@ -6,6 +6,9 @@ import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
 import { getLicenseRateLimit } from '@/config/ratelimits';
 import { hasAppAccess } from '@/lib/authz';
+import { sanitizeObjectId } from '@/lib/sanitize';
+import { logAccessEvent, SECURITY_EVENTS } from '@/lib/security-logger';
+import { handleApiError } from '@/lib/errors';
 
 export async function DELETE(req, { params }) {
   const rateLimited = checkRateLimit(req, getLicenseRateLimit('delete'));
@@ -18,12 +21,13 @@ export async function DELETE(req, { params }) {
     }
 
     const { id } = await params;
-    if (!id) {
+    const licenseId = id ? sanitizeObjectId(id) : null;
+    if (!licenseId) {
       return NextResponse.json({ success: false, message: 'invalid license id' }, { status: 400 });
     }
 
     await connectDB();
-    const license = await License.findById(id).populate('appId');
+    const license = await License.findById(licenseId).populate('appId');
     if (!license) {
       return NextResponse.json({ success: false, message: 'license not found' }, { status: 404 });
     }
@@ -31,6 +35,7 @@ export async function DELETE(req, { params }) {
     const app = license.appId;
     const hasAccess = hasAppAccess(app, user);
     if (!hasAccess) {
+      logAccessEvent(SECURITY_EVENTS.ACCESS_DENIED, user.id, `license:${license._id}`, req, 'no_app_access').catch(() => {});
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
@@ -41,18 +46,15 @@ export async function DELETE(req, { params }) {
       : false;
 
     if (!isAdmin && !isOwner && !isCollaborator) {
+      logAccessEvent(SECURITY_EVENTS.ACCESS_DENIED, user.id, `license:${license._id}:delete`, req, 'insufficient_permissions').catch(() => {});
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
-    await License.deleteOne({ _id: id });
+    await License.deleteOne({ _id: licenseId });
 
     return NextResponse.json({ success: true, message: 'license deleted' });
   } catch (error) {
-    console.error('Delete license error:', error);
-    return NextResponse.json(
-      { success: false, message: 'internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'licenses_delete');
   }
 }
 

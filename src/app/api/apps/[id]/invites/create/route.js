@@ -11,6 +11,7 @@ import { getCollaboratorLimit, getPartnerLimit } from '@/lib/plans';
 import { hasAppAccess } from '@/lib/authz';
 import { cleanupAppInvites } from '@/lib/maintenance';
 import { logAccessEvent, SECURITY_EVENTS } from '@/lib/security-logger';
+import { sanitizeObjectId } from '@/lib/sanitize';
 import { handleApiError } from '@/lib/errors';
 
 const MAX_ATTEMPTS = 5;
@@ -30,7 +31,7 @@ export async function POST(req, { params }) {
     }
 
     const { id } = await params;
-    const appId = id;
+    const appId = id ? sanitizeObjectId(id) : null;
     if (!appId) {
       return NextResponse.json({ success: false, message: 'invalid app id' }, { status: 400 });
     }

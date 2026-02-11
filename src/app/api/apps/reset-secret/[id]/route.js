@@ -7,6 +7,9 @@ import { getAppRateLimit } from '@/config/ratelimits';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { hasAppAccess } from '@/lib/authz';
+import { sanitizeObjectId } from '@/lib/sanitize';
+import { logAccessEvent, logSecurityEvent, SECURITY_EVENTS } from '@/lib/security-logger';
+import { handleApiError } from '@/lib/errors';
 
 export async function POST(req, { params }) {
   const rateLimited = checkRateLimit(req, getAppRateLimit('resetSecret'));
@@ -19,18 +22,20 @@ export async function POST(req, { params }) {
     }
 
     const { id } = await params;
-    if (!id) {
+    const appId = id ? sanitizeObjectId(id) : null;
+    if (!appId) {
       return NextResponse.json({ success: false, message: 'invalid app id' }, { status: 400 });
     }
 
     await connectDB();
-    const app = await App.findById(id);
+    const app = await App.findById(appId);
     if (!app || app.status === 'suspended') {
       return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
     }
 
     const hasAccess = hasAppAccess(app, user);
     if (!hasAccess) {
+      logAccessEvent(SECURITY_EVENTS.ACCESS_DENIED, user.id, `app:${app._id}:reset-secret`, req, 'no_app_access').catch(() => {});
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
@@ -41,6 +46,7 @@ export async function POST(req, { params }) {
       : false;
 
     if (!isAdmin && !isOwner && !isCollaborator) {
+      logAccessEvent(SECURITY_EVENTS.ACCESS_DENIED, user.id, `app:${app._id}:reset-secret`, req, 'insufficient_permissions').catch(() => {});
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
@@ -50,16 +56,20 @@ export async function POST(req, { params }) {
     app.apiSecretHash = apiSecretHash;
     await app.save();
 
+    logSecurityEvent(SECURITY_EVENTS.API_SECRET_RESET, {
+      userId: user.id,
+      appId: app._id.toString(),
+      ip: req.headers.get('x-forwarded-for')?.split(',')[0] || req.headers.get('x-real-ip') || 'unknown',
+      userAgent: req.headers.get('user-agent') || 'unknown',
+    }).catch(() => {});
+
     return NextResponse.json({
       success: true,
       message: 'API secret reset',
       data: { apiSecret: plainSecret }, // return only once
     });
   } catch (error) {
-    return NextResponse.json(
-      { success: false, message: 'internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'apps_reset_secret');
   }
 }
 

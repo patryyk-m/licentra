@@ -7,6 +7,8 @@ import App from '@/models/App';
 import AppInvite from '@/models/AppInvite';
 import { hasAppAccess } from '@/lib/authz';
 import { cleanupAppInvites } from '@/lib/maintenance';
+import { sanitizeObjectId } from '@/lib/sanitize';
+import { handleApiError } from '@/lib/errors';
 
 export async function DELETE(req, { params }) {
   const rateLimited = checkRateLimit(req, getInviteRateLimit('delete'));
@@ -19,8 +21,8 @@ export async function DELETE(req, { params }) {
     }
 
     const resolvedParams = await params;
-    const appId = resolvedParams?.id;
-    const inviteId = resolvedParams?.inviteId;
+    const appId = resolvedParams?.id ? sanitizeObjectId(resolvedParams.id) : null;
+    const inviteId = resolvedParams?.inviteId ? sanitizeObjectId(resolvedParams.inviteId) : null;
 
     if (!appId || !inviteId) {
       return NextResponse.json({ success: false, message: 'invalid request parameters' }, { status: 400 });
@@ -56,11 +58,7 @@ export async function DELETE(req, { params }) {
       message: 'invite cleared',
     });
   } catch (error) {
-    console.error('delete app invite error:', error);
-    return NextResponse.json(
-      { success: false, message: 'internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'invites_delete');
   }
 }
 

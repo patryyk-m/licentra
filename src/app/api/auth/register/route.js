@@ -10,6 +10,8 @@ import { setAuthCookies } from '@/lib/cookies';
 import { checkRateLimit } from '@/lib/ratelimit';
 import { getAuthRateLimit } from '@/config/ratelimits';
 import { sendWelcomeEmail } from '@/lib/email';
+import { logAuthEvent, SECURITY_EVENTS } from '@/lib/security-logger';
+import { handleApiError } from '@/lib/errors';
 
 const registerSchema = z.object({
   username: z.string().min(3).max(30).toLowerCase(),
@@ -48,6 +50,7 @@ export async function POST(req) {
     });
 
     if (existingUser) {
+      logAuthEvent(SECURITY_EVENTS.REGISTER_FAILURE, null, req, { reason: 'email_or_username_exists' }).catch(() => {});
       return NextResponse.json(
         {
           success: false,
@@ -152,6 +155,8 @@ export async function POST(req) {
     // Set cookies
     setAuthCookies(response, accessToken, refreshToken);
 
+    logAuthEvent(SECURITY_EVENTS.REGISTER_SUCCESS, user._id.toString(), req).catch(() => {});
+
     // send welcome email
     sendWelcomeEmail(user.email, user.username).catch((error) => {
       console.error('[register] failed to send welcome email:', error);
@@ -160,6 +165,7 @@ export async function POST(req) {
     return response;
   } catch (error) {
     if (error instanceof z.ZodError) {
+      logAuthEvent(SECURITY_EVENTS.REGISTER_FAILURE, null, req, { reason: 'validation_error' }).catch(() => {});
       return NextResponse.json(
         {
           success: false,
@@ -168,15 +174,7 @@ export async function POST(req) {
         { status: 400 }
       );
     }
-
-    console.error('Registration error:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        message: 'Internal server error',
-      },
-      { status: 500 }
-    );
+    return handleApiError(error, 'register');
   }
 }
 
