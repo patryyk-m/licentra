@@ -58,10 +58,6 @@ const UserSchema = new Schema({
       passwordChange: { type: Boolean, default: true },
       sessionRevoked: { type: Boolean, default: true },
     },
-    privacy: {
-      consentToProcessing: { type: Boolean, default: false },
-      cookiePreferences: { type: String, enum: ['essential', 'all'], default: 'essential' },
-    },
   },
   subscription: {
     stripeCustomerId: { type: String, default: null },

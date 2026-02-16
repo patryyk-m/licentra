@@ -13,10 +13,6 @@ const preferencesSchema = z.object({
     passwordChange: z.boolean().optional(),
     sessionRevoked: z.boolean().optional(),
   }).optional(),
-  privacy: z.object({
-    consentToProcessing: z.boolean().optional(),
-    cookiePreferences: z.enum(['essential', 'all']).optional(),
-  }).optional(),
 }).strict();
 
 export async function GET(req) {
@@ -43,10 +39,6 @@ export async function GET(req) {
             loginAlerts: true,
             passwordChange: true,
             sessionRevoked: true,
-          },
-          privacy: {
-            consentToProcessing: false,
-            cookiePreferences: 'essential',
           },
         },
       },
@@ -77,9 +69,6 @@ export async function PATCH(req) {
     const updateData = {};
     if (validated.notifications) {
       updateData['preferences.notifications'] = validated.notifications;
-    }
-    if (validated.privacy) {
-      updateData['preferences.privacy'] = validated.privacy;
     }
 
     await User.findByIdAndUpdate(user.id, {

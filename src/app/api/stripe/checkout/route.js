@@ -20,8 +20,15 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 
 // base url for stripe redirects
 function getStripeBaseUrl() {
-  const url = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://licentra.dev';
-  return (url && !url.includes('localhost') ? url : 'https://licentra.dev').replace(/\/$/, '');
+
+  const url = process.env.NEXT_PUBLIC_APP_URL;
+  
+  if (url) {
+    return url.replace(/\/$/, '');
+  }
+  
+  // fallback to production if not set
+  return 'https://licentra.dev';
 }
 
 export async function POST(req) {

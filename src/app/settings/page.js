@@ -10,7 +10,17 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Shield, Lock, Eye, Bell, Trash2, Download, LogOut, AlertTriangle } from 'lucide-react';
+import { Shield, Lock, Eye, Bell, Trash2, Download, LogOut, AlertTriangle, Cookie, Settings, KeyRound, Monitor, Save } from 'lucide-react';
+import {
+  getCookieConsent,
+  getCookieConsentData,
+  hasCookieConsent,
+  saveCookieConsent,
+  acceptAllCookies,
+  rejectAllCookies,
+  resetCookieConsent,
+  COOKIE_CATEGORIES,
+} from '@/lib/cookie-consent';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -40,12 +50,21 @@ export default function SettingsPage() {
       passwordChange: true,
       sessionRevoked: true,
     },
-    privacy: {
-      consentToProcessing: false,
-      cookiePreferences: 'essential',
-    },
   });
   const [isSavingPreferences, setIsSavingPreferences] = useState(false);
+
+  // Cookie consent state
+  const [cookiePreferences, setCookiePreferences] = useState(() => {
+    const consent = getCookieConsent();
+    if (consent) {
+      return consent;
+    }
+    return Object.keys(COOKIE_CATEGORIES).reduce((acc, key) => {
+      acc[key] = COOKIE_CATEGORIES[key].required || false;
+      return acc;
+    }, {});
+  });
+  const [showCookieDialog, setShowCookieDialog] = useState(false);
 
   // Audit state
   const [auditLogs, setAuditLogs] = useState([]);
@@ -275,6 +294,62 @@ export default function SettingsPage() {
     }
   };
 
+  // cookie consent handlers
+  useEffect(() => {
+    // sync cookie preferences from localStorage
+    const consent = getCookieConsent();
+    if (consent) {
+      setCookiePreferences(consent);
+    }
+
+    // listen for cookie consent updates
+    const handleConsentUpdate = (event) => {
+      if (event.detail) {
+        setCookiePreferences(event.detail);
+      }
+    };
+
+    window.addEventListener('cookieConsentUpdated', handleConsentUpdate);
+    return () => {
+      window.removeEventListener('cookieConsentUpdated', handleConsentUpdate);
+    };
+  }, []);
+
+  const handleSaveCookiePreferences = () => {
+    saveCookieConsent(cookiePreferences);
+    setShowCookieDialog(false);
+    toast.success('cookie preferences updated');
+  };
+
+  const toggleCookieCategory = (categoryId) => {
+    // cannot toggle necessary cookies (required for system to work)
+    if (categoryId === 'necessary') {
+      return;
+    }
+    setCookiePreferences((prev) => ({
+      ...prev,
+      [categoryId]: !prev[categoryId],
+    }));
+  };
+
+  const handleAcceptAllCookies = () => {
+    acceptAllCookies();
+    const consent = getCookieConsent();
+    if (consent) {
+      setCookiePreferences(consent);
+    }
+    toast.success('all cookies accepted');
+  };
+
+  const handleRejectAllCookies = () => {
+    rejectAllCookies();
+    const consent = getCookieConsent();
+    if (consent) {
+      setCookiePreferences(consent);
+    }
+    toast.success('optional cookies rejected');
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -318,7 +393,10 @@ export default function SettingsPage() {
           <TabsContent value="security" className="space-y-6 mt-6">
             <Card>
               <CardHeader>
-                <CardTitle>Change Password</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <KeyRound className="w-5 h-5" />
+                  Change Password
+                </CardTitle>
                 <CardDescription>update your password to keep your account secure</CardDescription>
               </CardHeader>
               <CardContent>
@@ -356,6 +434,7 @@ export default function SettingsPage() {
                     />
                   </div>
                   <Button type="submit" disabled={isChangingPassword}>
+                    <KeyRound className="w-4 h-4 mr-2" />
                     {isChangingPassword ? 'changing...' : 'change password'}
                   </Button>
                 </form>
@@ -364,7 +443,10 @@ export default function SettingsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Active Sessions</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Monitor className="w-5 h-5" />
+                  Active Sessions
+                </CardTitle>
                 <CardDescription>manage your active sessions and devices</CardDescription>
               </CardHeader>
               <CardContent>
@@ -406,7 +488,10 @@ export default function SettingsPage() {
           <TabsContent value="privacy" className="space-y-6 mt-6">
             <Card>
               <CardHeader>
-                <CardTitle>Data Export</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Download className="w-5 h-5" />
+                  Data Export
+                </CardTitle>
                 <CardDescription>download a copy of your personal data (GDPR right to data portability)</CardDescription>
               </CardHeader>
               <CardContent>
@@ -419,37 +504,81 @@ export default function SettingsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Privacy Preferences</CardTitle>
-                <CardDescription>control how your data is processed</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                  <Cookie className="w-5 h-5" />
+                  Cookie Preferences
+                </CardTitle>
+                <CardDescription>manage your cookie consent preferences</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Consent to Optional Processing</Label>
-                    <p className="text-sm text-muted-foreground">allow optional data processing (default: off)</p>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    {hasCookieConsent() ? (
+                      <>
+                        your cookie preferences are currently saved.{' '}
+                        {(() => {
+                          const consentData = getCookieConsentData();
+                          if (consentData?.expiryDate) {
+                            const expiry = new Date(consentData.expiryDate);
+                            return `they will remain active until ${expiry.toLocaleDateString()}.`;
+                          }
+                          return 'they will remain active for 12 months.';
+                        })()}{' '}
+                        you can update them at any time.
+                      </>
+                    ) : (
+                      'you have not set your cookie preferences yet. the banner will appear on your next visit.'
+                    )}
+                  </p>
+                  <div className="space-y-2">
+                    {Object.values(COOKIE_CATEGORIES).map((category) => (
+                      <div
+                        key={category.id}
+                        className="flex items-center justify-between gap-4 px-4 py-3 rounded-md border border-border bg-card"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-primary" />
+                          <span className="text-sm font-medium">{category.name}</span>
+                        </div>
+                        <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
+                          {cookiePreferences[category.id] ? 'enabled' : 'disabled'}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                  <Checkbox
-                    checked={preferences.privacy.consentToProcessing}
-                    onCheckedChange={(checked) => {
-                      setPreferences({
-                        ...preferences,
-                        privacy: {
-                          ...preferences.privacy,
-                          consentToProcessing: checked,
-                        },
-                      });
-                    }}
-                  />
                 </div>
-                <Button onClick={handleUpdatePreferences} disabled={isSavingPreferences}>
-                  {isSavingPreferences ? 'saving...' : 'save preferences'}
-                </Button>
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCookieDialog(true)}
+                  >
+                    <Settings className="w-4 h-4 mr-2" />
+                    customize
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRejectAllCookies}
+                  >
+                    reject all optional
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleAcceptAllCookies}
+                  >
+                    accept all
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
             <Card className="border-destructive">
               <CardHeader>
-                <CardTitle className="text-destructive">Delete Account</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-destructive">
+                  <Trash2 className="w-5 h-5" />
+                  Delete Account
+                </CardTitle>
                 <CardDescription>permanently delete your account and all associated data (GDPR right to erasure)</CardDescription>
               </CardHeader>
               <CardContent>
@@ -467,7 +596,10 @@ export default function SettingsPage() {
           <TabsContent value="notifications" className="space-y-6 mt-6">
             <Card>
               <CardHeader>
-                <CardTitle>Security Alerts</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Bell className="w-5 h-5" />
+                  Security Alerts
+                </CardTitle>
                 <CardDescription>choose which security events you want to be notified about</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -526,6 +658,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <Button onClick={handleUpdatePreferences} disabled={isSavingPreferences}>
+                  <Save className="w-4 h-4 mr-2" />
                   {isSavingPreferences ? 'saving...' : 'save preferences'}
                 </Button>
               </CardContent>
@@ -535,7 +668,10 @@ export default function SettingsPage() {
           <TabsContent value="audit" className="space-y-6 mt-6">
             <Card>
               <CardHeader>
-                <CardTitle>Security Audit Log</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Eye className="w-5 h-5" />
+                  Security Audit Log
+                </CardTitle>
                 <CardDescription>recent security-relevant events for your account</CardDescription>
               </CardHeader>
               <CardContent>
@@ -566,11 +702,80 @@ export default function SettingsPage() {
         </Tabs>
       </div>
 
+      {/* Cookie Preferences Dialog */}
+      <Dialog open={showCookieDialog} onOpenChange={setShowCookieDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Cookie className="w-5 h-5" />
+              Customize Cookie Preferences
+            </DialogTitle>
+            <DialogDescription>
+              choose which types of cookies you want to allow. necessary cookies are always enabled
+              as they are required for the website to function properly.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {Object.values(COOKIE_CATEGORIES).map((category) => (
+              <div
+                key={category.id}
+                className="flex items-start gap-4 p-4 rounded-lg border border-border bg-card"
+              >
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label
+                      htmlFor={`cookie-${category.id}`}
+                      className="font-semibold cursor-pointer"
+                    >
+                      {category.name}
+                    </Label>
+                    {category.required && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary">
+                        required
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground">{category.description}</p>
+                </div>
+                <Checkbox
+                  id={`cookie-${category.id}`}
+                  checked={cookiePreferences[category.id] || false}
+                  onCheckedChange={() => toggleCookieCategory(category.id)}
+                  disabled={category.required}
+                  className="mt-1"
+                />
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCookieDialog(false);
+                // reset to current saved preferences
+                const consent = getCookieConsent();
+                if (consent) {
+                  setCookiePreferences(consent);
+                }
+              }}
+            >
+              cancel
+            </Button>
+            <Button onClick={handleSaveCookiePreferences}>
+              <Save className="w-4 h-4 mr-2" />
+              save preferences
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="w-5 h-5" />
+              <Trash2 className="w-5 h-5" />
               Delete Account
             </DialogTitle>
             <DialogDescription>
