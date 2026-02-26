@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { logRateLimitEvent } from './security-logger';
+import { logRateLimitEvent, getClientIp } from './security-logger';
 
 // Simple in memory rate limiter
 const rateLimitMap = new Map();
@@ -13,9 +13,7 @@ export function checkRateLimit(req, config) {
   
   const limit = config.limit ?? 60;
   const window = config.windowMinutes ?? 1;
-  const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0] || 
-                   req.headers.get('x-real-ip') || 
-                   'unknown';
+  const clientIp = getClientIp(req);
   
   const now = Date.now();
   const windowMs = window * 60 * 1000;

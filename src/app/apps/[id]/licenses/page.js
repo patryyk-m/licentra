@@ -46,6 +46,7 @@ export default function LicensesPage() {
   const [editHwidLocked, setEditHwidLocked] = useState(false);
   const [editHwidLimit, setEditHwidLimit] = useState(1);
   const [hwidsToClear, setHwidsToClear] = useState(new Set());
+  const [suspendingId, setSuspendingId] = useState(null);
 
   const getDisplayLimit = (license) => {
     if (!license) return 5;
@@ -209,6 +210,50 @@ export default function LicensesPage() {
     }
   };
 
+  const handleSuspend = async (licenseId) => {
+    if (!licenseId) return;
+    setSuspendingId(licenseId);
+    try {
+      const res = await fetch(`/api/licenses/suspend/${licenseId}`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success('license suspended');
+        await fetchLicenses();
+      } else {
+        toast.error(json.message || 'failed');
+      }
+    } catch {
+      toast.error('network error');
+    } finally {
+      setSuspendingId(null);
+    }
+  };
+
+  const handleReactivate = async (licenseId) => {
+    if (!licenseId) return;
+    setSuspendingId(licenseId);
+    try {
+      const res = await fetch(`/api/licenses/reactivate/${licenseId}`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success('license reactivated');
+        await fetchLicenses();
+      } else {
+        toast.error(json.message || 'failed');
+      }
+    } catch {
+      toast.error('network error');
+    } finally {
+      setSuspendingId(null);
+    }
+  };
+
   const handleDelete = async (licenseId) => {
     try {
       const res = await fetch(`/api/licenses/delete/${licenseId}`, {
@@ -330,7 +375,7 @@ export default function LicensesPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-muted-foreground">loading...</div>
       </div>
     );
@@ -339,17 +384,15 @@ export default function LicensesPage() {
   if (!app || !user) return null;
 
   return (
-    <div className="min-h-screen p-6 md:p-10">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex items-center gap-4">
-          <Button asChild variant="outline"><Link href="/apps">← Back to Apps</Link></Button>
-          <h1 className="text-3xl font-bold">{app.name} - Licenses</h1>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold">License Actions</h2>
-            <p className="text-muted-foreground">create new licenses or export existing ones</p>
+    <div className="min-h-screen bg-background">
+      <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div className="mb-8 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button asChild variant="outline"><Link href="/apps">← Back to Apps</Link></Button>
+            <div>
+              <h1 className="text-3xl font-bold">{app.name} - Licenses</h1>
+              <p className="text-muted-foreground mt-2">create new licenses or export existing ones</p>
+            </div>
           </div>
           <div className="flex gap-2">
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
@@ -698,17 +741,40 @@ export default function LicensesPage() {
           ) : (
             <div className="space-y-2">
               {filteredLicenses.map((license) => (
-                <Card key={license.id}>
+                  <Card
+                    key={license.id}
+                    className={license.hasRateLimitAlert ? 'border-amber-500/60 bg-amber-500/5 border-l-4 border-l-amber-500' : ''}
+                  >
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
-                      <div className="flex-1 grid grid-cols-6 gap-4 items-center">
-                        <div>
-                          <div className="text-sm font-medium font-mono">{license.key}</div>
-                          <div className="text-xs text-muted-foreground">License Key</div>
+                      <div className="flex-1 grid grid-cols-7 gap-4 items-center">
+                        <div className="flex items-center gap-2">
+                          {license.hasRateLimitAlert && (
+                            <span
+                              className="inline-flex h-2.5 w-2.5 rounded-full bg-amber-500 shrink-0"
+                              title="rate limit alert - check security tab"
+                            />
+                          )}
+                          <div>
+                            <div className="text-sm font-medium font-mono">{license.key}</div>
+                            <div className="text-xs text-muted-foreground">License Key</div>
+                          </div>
                         </div>
                         <div>
-                          <Badge variant={!license.isExpired ? 'default' : 'secondary'}>
-                            {license.isExpired ? 'Expired' : 'Active'}
+                          <Badge
+                            variant={
+                              license.status === 'suspended'
+                                ? 'destructive'
+                                : license.isExpired
+                                  ? 'secondary'
+                                  : 'default'
+                            }
+                          >
+                            {license.status === 'suspended'
+                              ? 'Suspended'
+                              : license.isExpired
+                                ? 'Expired'
+                                : 'Active'}
                           </Badge>
                           <div className="text-xs text-muted-foreground mt-1">Status</div>
                         </div>
@@ -737,6 +803,19 @@ export default function LicensesPage() {
                           )}
                           <div className="text-xs text-muted-foreground">HWIDs</div>
                         </div>
+                        <div>
+                          {license.usage ? (
+                            <div className="text-xs space-y-0.5">
+                              <div className="font-medium">{license.usage.thisMonth.toLocaleString()}</div>
+                              <div className="text-muted-foreground">
+                                {license.usage.today > 0 ? `${license.usage.today} today` : 'this month'}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-xs text-muted-foreground">0</div>
+                          )}
+                          <div className="text-xs text-muted-foreground">API Calls</div>
+                        </div>
                       </div>
                       <div className="flex gap-2">
                         <Button
@@ -749,15 +828,38 @@ export default function LicensesPage() {
                         >
                           <Copy className="w-4 h-4" />
                         </Button>
-                        {['developer', 'admin'].includes(user.role) && (
+                        {(user.role === 'admin' || app.ownerId === user.id) && (
                           <>
-                            <Button variant="outline" size="sm" onClick={() => handleEdit(license)}>
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => handleDelete(license.id)}>
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            {license.status === 'suspended' ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleReactivate(license.id)}
+                                disabled={suspendingId === license.id}
+                              >
+                                {suspendingId === license.id ? 'reactivating...' : 'reactivate'}
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleSuspend(license.id)}
+                                disabled={suspendingId === license.id}
+                              >
+                                {suspendingId === license.id ? 'suspending...' : 'suspend'}
+                              </Button>
+                            )}
                           </>
+                        )}
+                        {['developer', 'admin'].includes(user.role) && (
+                          <Button variant="outline" size="sm" onClick={() => handleEdit(license)}>
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {(user.role === 'admin' || app.ownerId === user.id) && (
+                          <Button variant="outline" size="sm" onClick={() => handleDelete(license.id)}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         )}
                       </div>
                     </div>

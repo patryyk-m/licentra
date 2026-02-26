@@ -13,7 +13,7 @@ const PLAN_CARDS = [
   {
     id: 'free',
     name: 'Basic',
-    description: 'Basic test plan.',
+    description: 'Perfect for getting started.',
     monthly: 0,
     annual: 0,
     highlight: false,
@@ -23,7 +23,7 @@ const PLAN_CARDS = [
     ctaVariant: 'outline',
     baseFeatures: [
       'Up to 3 applications',
-      '1,000 license validations / month',
+      '1,000 API requests / month',
       'Basic analytics & reports',
       'Email support',
       'API & webhook access',
@@ -43,7 +43,7 @@ const PLAN_CARDS = [
     includesTrial: true,
     baseFeatures: [
       'Unlimited applications',
-      '50k license validations / month',
+      '50,000 API requests / month',
       'Advanced analytics & alerts',
       'Priority chat & email support',
       'API & webhook access',
@@ -64,7 +64,7 @@ const PLAN_CARDS = [
     includesTrial: false,
     baseFeatures: [
       'Unlimited applications',
-      'Unlimited validations',
+      'Unlimited API requests',
       'Advanced analytics & alerts',
       'Priority chat & email support',
       'API & webhook access',
@@ -392,36 +392,29 @@ export default function PricingPage() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <main className="flex-1">
-        <section className="relative py-24 px-4 sm:px-6 lg:px-8">
-          <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent pointer-events-none" />
-          <div className="relative max-w-5xl mx-auto text-center">
-            <p className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-sm font-medium bg-background shadow-sm">
-              Test
-            </p>
-            <h1 className="text-5xl sm:text-6xl font-bold tracking-tight mt-6">
-              Pricing
-            </h1>
-            <p className="text-xl text-muted-foreground mt-6">
+        <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold">Pricing</h1>
+            <p className="text-muted-foreground mt-2">
               Start on the Basic plan for free. Upgrade to Pro or Business when you need higher quota or better features.
             </p>
-
-            <div className="mt-10 inline-flex items-center gap-1 p-1 rounded-full border bg-muted">
-              {['monthly', 'annual'].map((cycle) => (
-                <button
-                  key={cycle}
-                  type="button"
-                  onClick={() => setBillingCycle(cycle)}
-                  className={`px-5 py-2 rounded-full text-sm font-medium transition ${
-                    billingCycle === cycle ? 'bg-background shadow text-foreground' : 'text-muted-foreground'
-                  }`}
-                >
-                  {cycle === 'monthly' ? 'Monthly' : 'Annual · save 20%'}
-                </button>
-              ))}
-            </div>
+          </div>
+          <div className="mb-8 inline-flex items-center gap-1 p-1 rounded-full border bg-muted">
+            {['monthly', 'annual'].map((cycle) => (
+              <button
+                key={cycle}
+                type="button"
+                onClick={() => setBillingCycle(cycle)}
+                className={`px-5 py-2 rounded-full text-sm font-medium transition ${
+                  billingCycle === cycle ? 'bg-background shadow text-foreground' : 'text-muted-foreground'
+                }`}
+              >
+                {cycle === 'monthly' ? 'Monthly' : 'Annual · save 20%'}
+              </button>
+            ))}
           </div>
 
-          <div className="relative max-w-6xl mx-auto mt-16 grid gap-8 md:grid-cols-3 items-stretch">
+          <div className="mt-8 grid gap-8 md:grid-cols-3 items-stretch">
             {formattedPlans.map((plan) => (
               <div
                 key={plan.name}
@@ -495,28 +488,25 @@ export default function PricingPage() {
               </div>
             ))}
           </div>
-        </section>
+        </div>
 
-        <section className="py-24 px-4 sm:px-6 lg:px-8 bg-muted/40">
-          <div className="max-w-4xl mx-auto text-center">
-            <h2 className="text-4xl font-bold">Launch faster with Licentra</h2>
-            <p className="text-xl text-muted-foreground mt-4">
+        <section className="py-12 px-4 sm:px-6 lg:px-8 bg-background border-t">
+          <div className="max-w-6xl mx-auto">
+            <h2 className="text-2xl font-semibold mb-2">Launch faster with Licentra</h2>
+            <p className="text-muted-foreground mb-6">
               Get help getting started. We&apos;ll set you up and answer any questions.
             </p>
-            <div className="mt-10 flex justify-center">
-              <Button asChild size="lg">
-                <Link href="/contact?topic=sales">Talk to sales</Link>
-              </Button>
-            </div>
+            <Button asChild size="lg">
+              <Link href="/support">Contact support</Link>
+            </Button>
           </div>
         </section>
 
-        <section className="py-24 px-4 sm:px-6 lg:px-8">
-          <div className="max-w-5xl mx-auto">
-            <div className="text-center mb-12">
-              <p className="text-sm font-semibold text-primary uppercase tracking-wide">FAQ</p>
-              <h2 className="text-4xl font-bold mt-2">Answers to pricing questions</h2>
-              <p className="text-muted-foreground mt-4">
+        <section className="py-12 px-4 sm:px-6 lg:px-8 bg-background">
+          <div className="max-w-6xl mx-auto">
+            <div className="mb-8">
+              <h2 className="text-2xl font-semibold">Frequently asked questions</h2>
+              <p className="text-muted-foreground mt-2">
                 Still unsure? Reach out and we will help you model the right plan for your growth.
               </p>
             </div>

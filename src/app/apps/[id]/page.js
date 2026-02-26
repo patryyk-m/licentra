@@ -8,8 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import AppSecurityTab from './AppSecurityTab';
 
 export default function AppDetailPage() {
   const params = useParams();
@@ -19,6 +21,8 @@ export default function AppDetailPage() {
   const [user, setUser] = useState(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [validationsPerMinutePerLicense, setValidationsPerMinutePerLicense] = useState(10);
+  const [autoSuspendOnRateLimitAbuse, setAutoSuspendOnRateLimitAbuse] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [apiSecret, setApiSecret] = useState('');
   const [hasSecret, setHasSecret] = useState(false);
@@ -53,6 +57,7 @@ export default function AppDetailPage() {
       tabs.push('settings');
       tabs.push('credentials');
       tabs.push('code');
+      tabs.push('security');
     }
     if (canManagePartners) {
       tabs.push('invites');
@@ -113,6 +118,8 @@ export default function AppDetailPage() {
     setApp(found);
     setName(found.name);
     setDescription(found.description || '');
+    setValidationsPerMinutePerLicense(found.validationsPerMinutePerLicense ?? 10);
+    setAutoSuspendOnRateLimitAbuse(found.autoSuspendOnRateLimitAbuse ?? false);
     setHasSecret(Boolean(found.hasApiSecret));
   }, [appId, router]);
 
@@ -137,7 +144,12 @@ export default function AppDetailPage() {
     const res = await fetch(`/api/apps/update/${appId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, description }),
+      body: JSON.stringify({
+        name,
+        description,
+        validationsPerMinutePerLicense: Math.min(Math.max(Number(validationsPerMinutePerLicense) || 10, 1), 120),
+        autoSuspendOnRateLimitAbuse,
+      }),
     });
     const json = await res.json();
     if (json.success) {
@@ -367,17 +379,22 @@ export default function AppDetailPage() {
   };
 
   if (!app) return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="text-muted-foreground">loading...</div>
     </div>
   );
 
   return (
-    <div className="min-h-screen p-6 md:p-10">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex items-center gap-4">
-          <Button asChild variant="outline"><Link href="/apps">← Back to Apps</Link></Button>
-          <h1 className="text-3xl font-bold">{app.name}</h1>
+    <div className="min-h-screen bg-background">
+      <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div className="mb-8 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button asChild variant="outline"><Link href="/apps">← Back to Apps</Link></Button>
+            <div>
+              <h1 className="text-3xl font-bold">{app.name}</h1>
+              <p className="text-muted-foreground mt-2">app settings, credentials, and security</p>
+            </div>
+          </div>
         </div>
 
         <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
@@ -385,6 +402,7 @@ export default function AppDetailPage() {
             {hasFullAppAccess && <TabsTrigger value="settings">Settings</TabsTrigger>}
             {hasFullAppAccess && <TabsTrigger value="credentials">Credentials</TabsTrigger>}
             {hasFullAppAccess && <TabsTrigger value="code">Code Examples</TabsTrigger>}
+            {hasFullAppAccess && <TabsTrigger value="security">Security</TabsTrigger>}
             {canManagePartners && <TabsTrigger value="invites">Invite to App</TabsTrigger>}
           </TabsList>
 
@@ -417,6 +435,33 @@ export default function AppDetailPage() {
                         disabled={!canEditApp}
                       />
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="validationsPerMinutePerLicense">validations per license per minute</Label>
+                      <Input
+                        id="validationsPerMinutePerLicense"
+                        type="number"
+                        min={1}
+                        max={120}
+                        value={validationsPerMinutePerLicense}
+                        onChange={(e) => setValidationsPerMinutePerLicense(Number(e.target.value) || 10)}
+                        disabled={!canEditApp}
+                      />
+                      <p className="text-xs text-muted-foreground">limits how often each license can call the validate api (1–120). default 10.</p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="autoSuspendOnRateLimitAbuse"
+                        checked={autoSuspendOnRateLimitAbuse}
+                        onCheckedChange={(checked) => setAutoSuspendOnRateLimitAbuse(!!checked)}
+                        disabled={!canEditApp}
+                      />
+                      <Label htmlFor="autoSuspendOnRateLimitAbuse" className="font-normal cursor-pointer">
+                        auto-suspend license when rate limit abuse is detected
+                      </Label>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      when enabled, licenses that hit rate limit thresholds (e.g. 50+ blocked requests or 10+ IPs in 10 min) are automatically suspended. you can reactivate them from manage licenses.
+                    </p>
                     <Button type="submit" disabled={!canEditApp}>
                       Save
                     </Button>
@@ -464,6 +509,12 @@ export default function AppDetailPage() {
                   <p className="text-muted-foreground">coming soon</p>
                 </CardContent>
               </Card>
+            </TabsContent>
+          )}
+
+          {hasFullAppAccess && (
+            <TabsContent value="security">
+              <AppSecurityTab appId={appId} />
             </TabsContent>
           )}
 

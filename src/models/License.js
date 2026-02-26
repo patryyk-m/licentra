@@ -54,7 +54,7 @@ const LicenseSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ['active'],
+      enum: ['active', 'suspended'],
       default: 'active',
       index: true,
     },

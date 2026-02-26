@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-export default function MetricCard({ label, value, icon: Icon, delay = 0, description }) {
+export default function MetricCard({ label, value, icon: Icon, delay = 0, description, maxValue, monthlyValue }) {
   const [displayValue, setDisplayValue] = useState(0);
 
   useEffect(() => {
@@ -65,15 +65,26 @@ export default function MetricCard({ label, value, icon: Icon, delay = 0, descri
           )}
         </div>
 
-        {/* progress bar */}
-        {typeof value === 'number' && value > 0 && (
-          <div className="mt-4 h-1 bg-muted rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${Math.min((value / 100) * 100, 100)}%` }}
-              transition={{ delay: delay + 0.3, duration: 0.8 }}
-              className="h-full bg-gradient-to-r from-primary to-primary/60"
-            />
+        {typeof monthlyValue === 'number' && maxValue && maxValue > 0 && (
+          <div className="mt-4 space-y-1">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{monthlyValue.toLocaleString()} / {maxValue === Infinity ? '∞' : maxValue.toLocaleString()} this month</span>
+              <span>{Math.min(Math.round((monthlyValue / maxValue) * 100), 100)}%</span>
+            </div>
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min((monthlyValue / maxValue) * 100, 100)}%` }}
+                transition={{ delay: delay + 0.3, duration: 0.8 }}
+                className={`h-full rounded-full ${
+                  (monthlyValue / maxValue) >= 0.9 
+                    ? 'bg-destructive' 
+                    : (monthlyValue / maxValue) >= 0.7 
+                    ? 'bg-yellow-500' 
+                    : 'bg-gradient-to-r from-primary to-primary/60'
+                }`}
+              />
+            </div>
           </div>
         )}
       </div>

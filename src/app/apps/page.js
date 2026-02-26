@@ -183,7 +183,7 @@ export default function AppsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-muted-foreground">loading...</div>
       </div>
     );
@@ -192,12 +192,12 @@ export default function AppsPage() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen p-6 md:p-10">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-background">
+      <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Applications</h1>
-            <p className="text-muted-foreground">manage your apps and credentials</p>
+            <p className="text-muted-foreground mt-2">manage your apps and credentials</p>
           </div>
           {canCreateApp && (
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
@@ -227,12 +227,13 @@ export default function AppsPage() {
           )}
         </div>
 
-        {['developer', 'admin'].includes(user.role) && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Add another application</CardTitle>
-              <CardDescription>enter a collaborator invite code to unlock an app</CardDescription>
-            </CardHeader>
+        <div className="space-y-6">
+          {['developer', 'admin'].includes(user.role) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Add another application</CardTitle>
+                <CardDescription>enter a collaborator invite code to unlock an app</CardDescription>
+              </CardHeader>
             <CardContent>
               <form className="flex flex-col gap-3 md:flex-row" onSubmit={handleClaimDeveloperCode}>
                 <Input
@@ -246,16 +247,16 @@ export default function AppsPage() {
                   {isClaimingDeveloperCode ? 'Applying...' : 'Apply code'}
                 </Button>
               </form>
-            </CardContent>
-          </Card>
-        )}
+              </CardContent>
+            </Card>
+          )}
 
-        {user.role === 'partner' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Add another application</CardTitle>
-              <CardDescription>enter a partner invite code to unlock another app</CardDescription>
-            </CardHeader>
+          {user.role === 'partner' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Add another application</CardTitle>
+                <CardDescription>enter a partner invite code to unlock another app</CardDescription>
+              </CardHeader>
             <CardContent>
               <form className="flex flex-col gap-3 md:flex-row" onSubmit={handleClaimCode}>
                 <Input
@@ -269,41 +270,42 @@ export default function AppsPage() {
                   {isClaimingCode ? 'Applying...' : 'Apply code'}
                 </Button>
               </form>
-            </CardContent>
-          </Card>
-        )}
+              </CardContent>
+            </Card>
+          )}
 
-        {apps.length === 0 ? (
-          <Card className="col-span-full">
-            <CardHeader>
-              <CardTitle>No applications</CardTitle>
-              <CardDescription>
-                {canCreateApp
-                  ? 'create your first application to get started'
-                  : 'ask an owner for access or apply an invite code above'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {canCreateApp ? (
-                <Button onClick={() => setIsCreateOpen(true)}>
-                  Create Application
-                </Button>
-              ) : (
-                <p className="text-sm text-muted-foreground">apply a partner invite code to unlock apps</p>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={apps.map((a) => a.id)} strategy={rectSortingStrategy}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {apps.map((app) => (
-                  <AppCard key={app.id} app={app} onChanged={fetchApps} userRole={user?.role} currentUser={user} />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-        )}
+          {apps.length === 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>No applications</CardTitle>
+                <CardDescription>
+                  {canCreateApp
+                    ? 'create your first application to get started'
+                    : 'ask an owner for access or apply an invite code above'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {canCreateApp ? (
+                  <Button onClick={() => setIsCreateOpen(true)}>
+                    Create Application
+                  </Button>
+                ) : (
+                  <p className="text-sm text-muted-foreground">apply a partner invite code to unlock apps</p>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={apps.map((a) => a.id)} strategy={rectSortingStrategy}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {apps.map((app) => (
+                    <AppCard key={app.id} app={app} onChanged={fetchApps} userRole={user?.role} currentUser={user} />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          )}
+        </div>
       </div>
     </div>
   );

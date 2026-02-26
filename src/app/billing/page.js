@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { CheckCircle, XCircle, CreditCard, Calendar, AlertCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, XCircle, CreditCard, Calendar, AlertCircle, Loader2, Package, ArrowUpDown, Settings2, ArrowUpRight } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
@@ -232,15 +232,15 @@ function BillingContent() {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center min-h-[calc(100vh-64px)]">
-        <Loader2 className="w-6 h-6 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (!billingData) {
     return (
-      <div className="flex justify-center items-center min-h-[calc(100vh-64px)]">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <p className="text-muted-foreground">failed to load billing data</p>
       </div>
     );
@@ -260,13 +260,13 @@ function BillingContent() {
   // show success message if redirected from checkout
   if (success === '1') {
     return (
-      <div className="min-h-[calc(100vh-64px)] flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-2xl w-full">
-          <Card className="p-6">
+      <div className="min-h-screen bg-background">
+        <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+          <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <CheckCircle className="w-8 h-8 text-green-500" />
-                <CardTitle>subscription activated</CardTitle>
+                <CheckCircle className="w-5 h-5 text-green-500" />
+                <CardTitle>Subscription Activated</CardTitle>
               </div>
               <CardDescription>
                 your subscription has been successfully activated.
@@ -292,101 +292,106 @@ function BillingContent() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-64px)] flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl w-full space-y-6">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight">billing</h1>
-          <p className="mt-2 text-lg text-muted-foreground">manage your subscription and billing</p>
+    <div className="min-h-screen bg-background">
+      <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold">Billing</h1>
+          <p className="text-muted-foreground mt-2">manage your subscription and billing</p>
         </div>
 
-        {/* current plan card */}
-        <Card className="p-6">
-          <CardHeader>
-            <CardTitle>current plan</CardTitle>
-            <CardDescription>your active subscription plan</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-2xl font-semibold capitalize">{plan}</p>
-                {status && (
-                  <p className="text-sm text-muted-foreground capitalize mt-1">
-                    status: {status === 'trialing' ? 'trial' : status}
-                    {cancelAtPeriodEnd && ' (canceling at period end)'}
-                  </p>
+        <div className="space-y-6">
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="w-5 h-5" />
+                Current Plan
+              </CardTitle>
+              <CardDescription>your active subscription plan</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-2xl font-semibold capitalize">{plan}</p>
+                  {status && (
+                    <p className="text-sm text-muted-foreground capitalize mt-1">
+                      status: {status === 'trialing' ? 'trial' : status}
+                      {cancelAtPeriodEnd && ' (canceling at period end)'}
+                    </p>
+                  )}
+                </div>
+                {plan === 'free' && (
+                  <Button asChild>
+                    <Link href="/pricing">
+                      <ArrowUpRight className="w-4 h-4 mr-2" />
+                      upgrade plan
+                    </Link>
+                  </Button>
                 )}
               </div>
-              {plan === 'free' && (
-                <Button asChild>
-                  <Link href="/pricing">upgrade plan</Link>
-                </Button>
+
+              {isTrialing && nextBillingDate && (
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                  <Calendar className="w-5 h-5 text-primary mt-0.5" />
+                  <div>
+                    <p className="font-medium text-primary">7-day free trial active</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      trial ends: {nextBillingDate.toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
               )}
-            </div>
 
-            {/* trial info */}
-            {isTrialing && nextBillingDate && (
-              <div className="flex items-start gap-3 p-4 rounded-lg bg-primary/5 border border-primary/20">
-                <Calendar className="w-5 h-5 text-primary mt-0.5" />
-                <div>
-                  <p className="font-medium text-primary">7-day free trial active</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    trial ends: {nextBillingDate.toLocaleDateString()}
-                  </p>
+              {hasActiveSubscription && nextBillingDate && !isTrialing && (
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-muted">
+                  <Calendar className="w-5 h-5 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="font-medium">next billing date</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {nextBillingDate.toLocaleDateString()}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* next billing date */}
-            {hasActiveSubscription && nextBillingDate && !isTrialing && (
-              <div className="flex items-start gap-3 p-4 rounded-lg bg-muted">
-                <Calendar className="w-5 h-5 text-muted-foreground mt-0.5" />
-                <div>
-                  <p className="font-medium">next billing date</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {nextBillingDate.toLocaleDateString()}
-                  </p>
+              {cancelAtPeriodEnd && scheduledBillingCycleChange && nextBillingDate && (
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                  <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-blue-600">billing cycle change scheduled</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      your billing cycle will change to {scheduledBillingCycleChange} on {nextBillingDate.toLocaleDateString()}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2 italic">
+                      note: this scheduled change is handled automatically by our system. stripe billing portal will only show the current subscription canceling.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* scheduled billing cycle change notice */}
-            {cancelAtPeriodEnd && scheduledBillingCycleChange && nextBillingDate && (
-              <div className="flex items-start gap-3 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-                <div>
-                  <p className="font-medium text-blue-600">billing cycle change scheduled</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    your billing cycle will change to {scheduledBillingCycleChange} on {nextBillingDate.toLocaleDateString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-2 italic">
-                    note: this scheduled change is handled automatically by our system. stripe billing portal will only show the current subscription canceling.
-                  </p>
+              {cancelAtPeriodEnd && !scheduledBillingCycleChange && nextBillingDate && (
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                  <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-yellow-600">subscription will cancel</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      your subscription will end on {nextBillingDate.toLocaleDateString()}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </CardContent>
+          </Card>
 
-            {/* cancel at period end notice (only if not a billing cycle change) */}
-            {cancelAtPeriodEnd && !scheduledBillingCycleChange && nextBillingDate && (
-              <div className="flex items-start gap-3 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
-                <div>
-                  <p className="font-medium text-yellow-600">subscription will cancel</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    your subscription will end on {nextBillingDate.toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* billing cycle switch */}
-        {hasActiveSubscription && (
-          <Card className="p-6">
-            <CardHeader>
-              <CardTitle>billing cycle</CardTitle>
-              <CardDescription>switch between monthly and annual billing</CardDescription>
-            </CardHeader>
+          {hasActiveSubscription && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ArrowUpDown className="w-5 h-5" />
+                  Billing Cycle
+                </CardTitle>
+                <CardDescription>switch between monthly and annual billing</CardDescription>
+              </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-4 rounded-lg bg-muted">
                 <div>
@@ -411,128 +416,116 @@ function BillingContent() {
                   )}
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-        )}
+              </CardContent>
+            </Card>
+          )}
 
-        {/* plan actions */}
-        {hasActiveSubscription && (
-          <Card className="p-6">
-            <CardHeader>
-              <CardTitle>manage subscription</CardTitle>
-              <CardDescription>change your plan or cancel your subscription</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* upgrade/downgrade */}
-              {plan === 'pro' && (
-                <div>
-                  <p className="text-sm font-medium mb-2">upgrade to business</p>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    your pro plan will be canceled and you will be upgraded immediately
+          {hasActiveSubscription && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings2 className="w-5 h-5" />
+                  Manage Subscription
+                </CardTitle>
+                <CardDescription>change your plan or cancel your subscription</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {plan === 'pro' && (
+                  <div>
+                    <p className="text-sm font-medium mb-2">upgrade to business</p>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      your pro plan will be canceled and you will be upgraded immediately
+                    </p>
+                    <Button
+                      onClick={() => handleChangePlan('business')}
+                      disabled={processingAction !== null}
+                      className="w-full sm:w-auto"
+                    >
+                      {processingAction === 'changePlan' ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          processing...
+                        </>
+                      ) : (
+                        <>
+                          <ArrowUpRight className="w-4 h-4 mr-2" />
+                          upgrade to business
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {plan === 'business' && (
+                  <div>
+                    <p className="text-sm font-medium mb-2">downgrade to pro</p>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      you will keep business features until {nextBillingDate ? nextBillingDate.toLocaleDateString() : 'end of billing period'}, then switch to pro
+                    </p>
+                    <Button
+                      onClick={() => handleChangePlan('pro')}
+                      disabled={processingAction !== null}
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                    >
+                      {processingAction === 'changePlan' ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          processing...
+                        </>
+                      ) : (
+                        'schedule downgrade to pro'
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {(!cancelAtPeriodEnd || scheduledBillingCycleChange) && (
+                  <div className="pt-4 border-t">
+                    <p className="text-sm font-medium mb-2 text-destructive">cancel subscription</p>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      {scheduledBillingCycleChange 
+                        ? `canceling will cancel your subscription and the scheduled billing cycle change. your subscription will continue until ${nextBillingDate ? nextBillingDate.toLocaleDateString() : 'end of billing period'}. you will not be billed again and will keep all features until then.`
+                        : `your subscription will continue until ${nextBillingDate ? nextBillingDate.toLocaleDateString() : 'end of billing period'}. you will not be billed again and will keep all features until then.`
+                      }
+                    </p>
+                    <Button
+                      onClick={handleCancelSubscription}
+                      disabled={processingAction !== null}
+                      variant="destructive"
+                      className="w-full sm:w-auto"
+                    >
+                      {processingAction === 'cancel' ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          processing...
+                        </>
+                      ) : (
+                        'cancel subscription'
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                <div className="pt-4 border-t">
+                  <p className="text-sm font-medium mb-2">billing portal</p>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    manage payment methods, view invoices, and update billing information
                   </p>
                   <Button
-                    onClick={() => handleChangePlan('business')}
-                    disabled={processingAction !== null}
-                    className="w-full sm:w-auto"
-                  >
-                    {processingAction === 'changePlan' ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        processing...
-                      </>
-                    ) : (
-                      'upgrade to business'
-                    )}
-                  </Button>
-                </div>
-              )}
-
-              {plan === 'business' && (
-                <div>
-                  <p className="text-sm font-medium mb-2">downgrade to pro</p>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    you will keep business features until {nextBillingDate ? nextBillingDate.toLocaleDateString() : 'end of billing period'}, then switch to pro
-                  </p>
-                  <Button
-                    onClick={() => handleChangePlan('pro')}
+                    onClick={handleOpenPortal}
                     disabled={processingAction !== null}
                     variant="outline"
                     className="w-full sm:w-auto"
                   >
-                    {processingAction === 'changePlan' ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        processing...
-                      </>
-                    ) : (
-                      'schedule downgrade to pro'
-                    )}
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    {processingAction === 'portal' ? 'opening...' : 'open billing portal'}
                   </Button>
                 </div>
-              )}
-
-              {/* cancel subscription */}
-              {(!cancelAtPeriodEnd || scheduledBillingCycleChange) && (
-                <div className="pt-4 border-t">
-                  <p className="text-sm font-medium mb-2 text-destructive">cancel subscription</p>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    {scheduledBillingCycleChange 
-                      ? `canceling will cancel your subscription and the scheduled billing cycle change. your subscription will continue until ${nextBillingDate ? nextBillingDate.toLocaleDateString() : 'end of billing period'}. you will not be billed again and will keep all features until then.`
-                      : `your subscription will continue until ${nextBillingDate ? nextBillingDate.toLocaleDateString() : 'end of billing period'}. you will not be billed again and will keep all features until then.`
-                    }
-                  </p>
-                  <Button
-                    onClick={handleCancelSubscription}
-                    disabled={processingAction !== null}
-                    variant="destructive"
-                    className="w-full sm:w-auto"
-                  >
-                    {processingAction === 'cancel' ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        processing...
-                      </>
-                    ) : (
-                      'cancel subscription'
-                    )}
-                  </Button>
-                </div>
-              )}
-
-              {/* stripe customer portal */}
-              <div className="pt-4 border-t">
-                <p className="text-sm font-medium mb-2">billing portal</p>
-                <p className="text-sm text-muted-foreground mb-3">
-                  manage payment methods, view invoices, and update billing information
-                </p>
-                <Button
-                  onClick={handleOpenPortal}
-                  disabled={processingAction !== null}
-                  variant="outline"
-                  className="w-full sm:w-auto"
-                >
-                  <CreditCard className="w-4 h-4 mr-2" />
-                  {processingAction === 'portal' ? 'opening...' : 'open billing portal'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* free plan upgrade cta */}
-        {plan === 'free' && (
-          <Card className="p-6">
-            <CardHeader>
-              <CardTitle>upgrade your plan</CardTitle>
-              <CardDescription>unlock more features with a paid plan</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button asChild className="w-full sm:w-auto">
-                <Link href="/pricing">view plans</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -541,8 +534,8 @@ function BillingContent() {
 export default function BillingPage() {
   return (
     <Suspense fallback={
-      <div className="flex justify-center items-center min-h-[calc(100vh-64px)]">
-        <Loader2 className="w-6 h-6 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
       </div>
     }>
       <BillingContent />

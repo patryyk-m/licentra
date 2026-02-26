@@ -109,13 +109,13 @@ export default function Navbar() {
             <Link href="/pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               Pricing
             </Link>
-            <Link href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               Features
             </Link>
-            <Link href="#docs" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/docs" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               Documentation
             </Link>
-            <Link href="#support" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/support" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               Support
             </Link>
           </div>
@@ -125,7 +125,8 @@ export default function Navbar() {
             {isLoading ? (
               <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             ) : user ? (
-              <div className="relative user-menu-container">
+              <>
+                <div className="relative user-menu-container">
                 <Button
                   variant="outline"
                   size="sm"
@@ -176,7 +177,8 @@ export default function Navbar() {
                     </div>
                   </motion.div>
                 )}
-              </div>
+                </div>
+              </>
             ) : (
               <>
                 <Button asChild variant="ghost" size="sm">

@@ -21,7 +21,7 @@ export default function Footer() {
             <h3 className="text-sm font-semibold mb-4">Product</h3>
             <ul className="space-y-2">
               <li>
-                <Link href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <Link href="/features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Features
                 </Link>
               </li>
@@ -31,7 +31,7 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="#docs" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <Link href="/docs" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Documentation
                 </Link>
               </li>
@@ -43,13 +43,13 @@ export default function Footer() {
             <h3 className="text-sm font-semibold mb-4">Support</h3>
             <ul className="space-y-2">
               <li>
-                <Link href="#help" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Help Center
+                <Link href="/support" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Support
                 </Link>
               </li>
               <li>
-                <Link href="#status" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Status
+                <Link href="/docs" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Documentation
                 </Link>
               </li>
             </ul>

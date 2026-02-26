@@ -43,7 +43,9 @@ export async function sendEmail({ to, subject, html }) {
       return { success: false, error: error.message || 'failed to send email' };
     }
 
-    console.log('[email] sent successfully:', { to, subject, id: data?.id });
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[email] sent successfully:', { subject, id: data?.id });
+    }
     return { success: true, id: data?.id };
   } catch (error) {
     console.error('[email] unexpected error:', error);
