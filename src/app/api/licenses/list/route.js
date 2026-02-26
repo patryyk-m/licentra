@@ -3,6 +3,8 @@ import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import License from '@/models/License';
 import App from '@/models/App';
+import ApiUsage from '@/models/ApiUsage';
+import Notification from '@/models/Notification';
 import { checkRateLimit } from '@/lib/ratelimit';
 import { getLicenseRateLimit } from '@/config/ratelimits';
 import { ROLE } from '@/lib/roles';
@@ -49,7 +51,7 @@ export async function GET(req) {
       return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
     }
 
-    const licenseQuery = { appId };
+    const licenseQuery = { appId: app._id };
 
     if (isPartner && !isAdmin && !isOwner && !isCollaborator) {
       licenseQuery.createdBy = user.id;
@@ -57,7 +59,74 @@ export async function GET(req) {
 
     const licenses = await License.find(licenseQuery).sort({ createdAt: -1 }).lean();
 
+    if (licenses.length === 0) {
+      return NextResponse.json({ success: true, data: { licenses: [] } });
+    }
+
+    // get usage stats for all licenses
+    const licenseIds = licenses.map(l => l._id);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    firstDayOfMonth.setHours(0, 0, 0, 0);
+
+    const todayUsage = await ApiUsage.find({
+      appId: app._id,
+      licenseId: { $in: licenseIds },
+      date: today,
+    }).lean();
+
+    const monthUsage = await ApiUsage.find({
+      appId: app._id,
+      licenseId: { $in: licenseIds },
+      date: { $gte: firstDayOfMonth },
+    }).lean();
+
+    const allUsage = await ApiUsage.find({
+      appId: app._id,
+      licenseId: { $in: licenseIds },
+    }).lean();
+
+    const licenseIdsWithAlerts = new Set(
+      (await Notification.find({
+        appId: app._id,
+        licenseId: { $in: licenseIds },
+        type: 'rate_limit',
+        isRead: false,
+      }).select('licenseId').lean())
+        .map((n) => n.licenseId?.toString())
+        .filter(Boolean)
+    );
+
     const sanitized = licenses.map((l) => {
+      const licenseId = l._id;
+      const licenseIdStr = licenseId.toString();
+      
+      // match licenseId using both string and ObjectId comparison
+      const todayCount = todayUsage
+        .filter(r => {
+          if (!r.licenseId) return false;
+          const rLicenseIdStr = r.licenseId.toString ? r.licenseId.toString() : String(r.licenseId);
+          return rLicenseIdStr === licenseIdStr;
+        })
+        .reduce((sum, r) => sum + (r.count || 0), 0);
+      
+      const monthCount = monthUsage
+        .filter(r => {
+          if (!r.licenseId) return false;
+          const rLicenseIdStr = r.licenseId.toString ? r.licenseId.toString() : String(r.licenseId);
+          return rLicenseIdStr === licenseIdStr;
+        })
+        .reduce((sum, r) => sum + (r.count || 0), 0);
+      
+      const allTimeCount = allUsage
+        .filter(r => {
+          if (!r.licenseId) return false;
+          const rLicenseIdStr = r.licenseId.toString ? r.licenseId.toString() : String(r.licenseId);
+          return rLicenseIdStr === licenseIdStr;
+        })
+        .reduce((sum, r) => sum + (r.count || 0), 0);
+
       return {
         id: l._id.toString(),
         key: l.key || '',
@@ -70,6 +139,12 @@ export async function GET(req) {
         createdAt: l.createdAt,
         updatedAt: l.updatedAt,
         isExpired: l.expiryDate ? new Date(l.expiryDate) < new Date() : false,
+        hasRateLimitAlert: licenseIdsWithAlerts.has(licenseIdStr),
+        usage: {
+          today: todayCount,
+          thisMonth: monthCount,
+          allTime: allTimeCount,
+        },
       };
     });
 

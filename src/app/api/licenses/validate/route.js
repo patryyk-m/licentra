@@ -3,8 +3,12 @@ import { z } from 'zod';
 import { connectDB } from '@/lib/db';
 import { checkRateLimit } from '@/lib/ratelimit';
 import { getLicenseRateLimit } from '@/config/ratelimits';
+import { checkLicenseRateLimit } from '@/lib/license-ratelimit';
+import { recordRateLimitEvent, checkAndCreateNotification } from '@/lib/rate-limit-notifications';
+import { getClientIp } from '@/lib/security-logger';
 import App from '@/models/App';
 import License from '@/models/License';
+import ApiUsage from '@/models/ApiUsage';
 import { verifyPassword } from '@/lib/crypto';
 import { sanitizeObjectId, sanitizeHwid } from '@/lib/sanitize';
 import { handleApiError } from '@/lib/errors';
@@ -97,6 +101,17 @@ export async function POST(req) {
       return responseInvalid('license_expired');
     }
 
+    const licenseLimitResult = checkLicenseRateLimit(app, license);
+    if (licenseLimitResult.exceeded) {
+      const clientIp = getClientIp(req);
+      recordRateLimitEvent(app._id, license._id, clientIp).catch(() => {});
+      checkAndCreateNotification(app._id, license._id).catch(() => {});
+      return NextResponse.json(
+        { success: false, message: 'Too many validation requests for this license. Try again later.' },
+        { status: 429 }
+      );
+    }
+
     const effectiveLimit = resolveEffectiveLimit(license);
 
     // add hwid if provided and theres room
@@ -136,6 +151,49 @@ export async function POST(req) {
         if (!hasNormalizedHwid) {
           return responseInvalid('hwid_required');
         }
+      }
+    }
+
+    // track API usage (fire and forget)
+    if (app.ownerId) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // track app-level usage
+      ApiUsage.findOneAndUpdate(
+        {
+          userId: app.ownerId,
+          appId: app._id,
+          date: today,
+          $or: [
+            { licenseId: null },
+            { licenseId: { $exists: false } },
+          ],
+        },
+        { $inc: { count: 1 }, $setOnInsert: { licenseId: null } },
+        { upsert: true, new: true }
+      ).catch((err) => {
+        console.error('failed to track app API usage:', err);
+      });
+      
+      // track per-license usage
+      const licenseIdToTrack = license._id;
+      if (licenseIdToTrack) {
+        ApiUsage.findOneAndUpdate(
+          { userId: app.ownerId, appId: app._id, licenseId: licenseIdToTrack, date: today },
+          { 
+            $inc: { count: 1 }, 
+            $setOnInsert: { 
+              licenseId: licenseIdToTrack, 
+              userId: app.ownerId, 
+              appId: app._id, 
+              date: today 
+            } 
+          },
+          { upsert: true, new: true }
+        ).catch((err) => {
+          console.error('failed to track license API usage:', err);
+        });
       }
     }
     

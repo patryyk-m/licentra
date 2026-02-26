@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "security:check": "node scripts/security-check-deps.mjs",
-    "security:audit": "npm audit"
+    "security:audit": "npm audit",
+    "fix:apiusage-index": "node scripts/fix-apiusage-index.js",
+    "seed:notifications": "node scripts/seed-test-notifications.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

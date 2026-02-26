@@ -59,6 +59,8 @@ export async function GET(req) {
         createdAt: a.createdAt,
         updatedAt: a.updatedAt,
         hasApiSecret: !!a.apiSecretHash,
+        validationsPerMinutePerLicense: a.validationsPerMinutePerLicense ?? 10,
+        autoSuspendOnRateLimitAbuse: a.autoSuspendOnRateLimitAbuse ?? false,
         ownerId: a.ownerId?.toString?.() || '',
         accessLevel: normalizedRole === ROLE.ADMIN
           ? 'admin'

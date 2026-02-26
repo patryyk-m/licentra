@@ -58,6 +58,13 @@ export async function PATCH(req, { params }) {
       const desc = sanitizeForDb(body.description.trim(), 500);
       updates.description = desc ?? '';
     }
+    if (typeof body?.validationsPerMinutePerLicense === 'number') {
+      const v = Math.min(Math.max(Math.floor(body.validationsPerMinutePerLicense), 1), 120);
+      updates.validationsPerMinutePerLicense = v;
+    }
+    if (typeof body?.autoSuspendOnRateLimitAbuse === 'boolean') {
+      updates.autoSuspendOnRateLimitAbuse = body.autoSuspendOnRateLimitAbuse;
+    }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ success: false, message: 'no updates provided' }, { status: 400 });
@@ -75,6 +82,8 @@ export async function PATCH(req, { params }) {
           name: app.name,
           description: app.description || '',
           status: app.status,
+          validationsPerMinutePerLicense: app.validationsPerMinutePerLicense ?? 10,
+          autoSuspendOnRateLimitAbuse: app.autoSuspendOnRateLimitAbuse ?? false,
           createdAt: app.createdAt,
           updatedAt: app.updatedAt,
         },

@@ -53,6 +53,15 @@ export async function PATCH(req, { params }) {
     const body = await req.json();
     const mongooseUpdate = {};
 
+    if (body.status !== undefined) {
+      const s = String(body.status).toLowerCase();
+      if (s === 'suspended' || s === 'active') {
+        mongooseUpdate.status = s;
+      } else {
+        return NextResponse.json({ success: false, message: 'invalid status' }, { status: 400 });
+      }
+    }
+
     // update expiry date
     if (body.expiryDate !== undefined) {
       if (body.expiryDate === null || body.expiryDate === '') {
