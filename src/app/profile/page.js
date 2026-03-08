@@ -15,6 +15,7 @@ export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [username, setUsername] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [adminNotes, setAdminNotes] = useState([]);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -26,6 +27,12 @@ export default function ProfilePage() {
       }
       setUser(json.data.profile);
       setUsername(json.data.profile.username);
+
+      const notesRes = await fetch('/api/profile/admin-notes', { credentials: 'include' });
+      const notesJson = await notesRes.json().catch(() => ({}));
+      if (notesRes.ok && notesJson.success) {
+        setAdminNotes(notesJson.data?.notes || []);
+      }
     } catch (error) {
       router.push('/login');
     } finally {
@@ -165,6 +172,27 @@ export default function ProfilePage() {
                 {isSaving ? 'saving...' : 'save changes'}
               </Button>
             </form>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Admin Notes</CardTitle>
+            <CardDescription>important notices from licentra admins</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {adminNotes.length === 0 ? (
+              <div className="text-sm text-muted-foreground">no admin notes</div>
+            ) : (
+              adminNotes.map((n) => (
+                <div key={n.id} className="rounded border p-3 text-sm">
+                  <div>{n.note}</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {n.createdAt ? new Date(n.createdAt).toLocaleString() : '-'}
+                  </div>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       </div>

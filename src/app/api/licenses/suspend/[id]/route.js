@@ -4,10 +4,13 @@ import { authenticateUser } from '@/middleware/auth';
 import License from '@/models/License';
 import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getLicenseRateLimit } from '@/config/ratelimits';
-import { hasAppAccess } from '@/lib/authz';
-import { sanitizeObjectId } from '@/lib/sanitize';
-import { handleApiError } from '@/lib/errors';
+import { getLicenseRateLimit } from '@/lib/ratelimit';
+import { hasAppAccess, isAdmin } from '@/lib/authz';
+import { requireStepUp } from '@/lib/auth-cookies';
+import { SECURITY_EVENTS, logAdminAction } from '@/lib/security';
+import { sanitizeObjectId } from '@/lib/security';
+import { handleApiError } from '@/lib/security';
+import { fail } from '@/lib/http';
 
 export async function POST(req, { params }) {
   const rateLimited = checkRateLimit(req, getLicenseRateLimit('update'));
@@ -16,40 +19,48 @@ export async function POST(req, { params }) {
   try {
     const user = await authenticateUser(req);
     if (!user || !['developer', 'admin'].includes(user.role)) {
-      return NextResponse.json(
-        { success: false, message: 'Forbidden: insufficient permissions' },
-        { status: 403 }
-      );
+      return fail('Forbidden: insufficient permissions', 403);
     }
 
     const { id } = await params;
     const licenseId = id ? sanitizeObjectId(id) : null;
     if (!licenseId) {
-      return NextResponse.json({ success: false, message: 'invalid license id' }, { status: 400 });
+      return fail('invalid license id', 400);
     }
 
     await connectDB();
     const license = await License.findById(licenseId).populate('appId');
     if (!license) {
-      return NextResponse.json({ success: false, message: 'license not found' }, { status: 404 });
+      return fail('license not found', 404);
     }
 
     const app = license.appId;
     const hasAccess = hasAppAccess(app, user);
     if (!hasAccess) {
-      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+      return fail('Forbidden', 403);
     }
 
     const isOwner = app.ownerId?.toString() === user.id;
-    const isAdmin = user.role === 'admin';
-    if (!isAdmin && !isOwner) {
-      return NextResponse.json(
-        { success: false, message: 'only app owner or admin can suspend licenses' },
-        { status: 403 }
-      );
+    const admin = isAdmin(user);
+    if (!admin && !isOwner) {
+      return fail('only app owner or admin can suspend licenses', 403);
+    }
+
+    const stepUpOk = await requireStepUp(req, user);
+    if (!stepUpOk) {
+      return fail('step-up required', 403);
     }
 
     await License.updateOne({ _id: licenseId }, { $set: { status: 'suspended' } });
+
+    await logAdminAction({
+      actorUserId: user.id,
+      action: SECURITY_EVENTS.LICENSE_SUSPENDED,
+      targetType: 'license',
+      targetId: licenseId,
+      metadata: { appId: app._id },
+      req,
+    });
 
     return NextResponse.json({
       success: true,

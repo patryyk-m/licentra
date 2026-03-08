@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getLicenseRateLimit } from '@/config/ratelimits';
+import { getLicenseRateLimit } from '@/lib/ratelimit';
 import ApiUsage from '@/models/ApiUsage';
 import License from '@/models/License';
 import App from '@/models/App';
-import { sanitizeObjectId } from '@/lib/sanitize';
+import { sanitizeObjectId } from '@/lib/security';
 import { hasAppAccess } from '@/lib/authz';
-import { handleApiError } from '@/lib/errors';
+import { handleApiError } from '@/lib/security';
+import { fail } from '@/lib/http';
 
 export async function GET(req) {
   const rateLimitResponse = checkRateLimit(req, getLicenseRateLimit('list'));
@@ -17,10 +18,7 @@ export async function GET(req) {
   try {
     const user = await authenticateUser(req);
     if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
+      return fail('Unauthorized', 401);
     }
 
     await connectDB();
@@ -29,16 +27,30 @@ export async function GET(req) {
     const appId = rawAppId ? sanitizeObjectId(rawAppId) : null;
 
     if (!appId) {
-      return NextResponse.json({ success: false, message: 'appId required' }, { status: 400 });
+      return fail('appId required', 400);
     }
 
     const app = await App.findById(appId);
-    if (!app || app.status === 'suspended') {
-      return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
+    if (!app) {
+      return fail('app not found', 404);
+    }
+
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    if (
+      app.status === 'suspended' &&
+      (app.suspensionReason === 'plan_quota' || app.quotaSuspended) &&
+      app.quotaSuspendedMonth !== monthKey
+    ) {
+      app.status = 'active';
+      app.quotaSuspended = false;
+      app.quotaSuspendedMonth = null;
+      app.suspensionReason = 'none';
+      await app.save();
     }
 
     if (!hasAppAccess(app, user)) {
-      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+      return fail('Forbidden', 403);
     }
 
     const today = new Date();

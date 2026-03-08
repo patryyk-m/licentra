@@ -1,29 +1,17 @@
-import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
-import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getAuthRateLimit } from '@/config/ratelimits';
+import { getAuthRateLimit } from '@/lib/ratelimit';
 import User from '@/models/User';
 import App from '@/models/App';
 import License from '@/models/License';
 import AppInvite from '@/models/AppInvite';
 import SecurityLog from '@/models/SecurityLog';
-import { logSecurityEvent, getClientIp, getUserAgent } from '@/lib/security-logger';
-import { handleApiError } from '@/lib/errors';
+import { logSecurityEvent, SECURITY_EVENTS, getClientIp, getUserAgent } from '@/lib/security';
+import { handleApiError } from '@/lib/security';
+import { ok, withAuth, withStepUp, wrapRoute } from '@/lib/http';
 
-export async function GET(req) {
-  const rateLimitResponse = checkRateLimit(req, { limit: 3, windowMinutes: 60 });
-  if (rateLimitResponse) return rateLimitResponse;
-
-  try {
-    const user = await authenticateUser(req);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
+const getHandler = withAuth(
+  withStepUp(async (req, user) => {
     await connectDB();
 
     // fetch all user data
@@ -86,26 +74,24 @@ export async function GET(req) {
       })),
     };
 
-    // log export event
-    await SecurityLog.create({
+    logSecurityEvent(SECURITY_EVENTS.DATA_EXPORT, {
       userId: user.id,
-      event: 'data_export',
       ip: getClientIp(req),
       userAgent: getUserAgent(req),
-      details: { timestamp: new Date().toISOString() },
-    });
-
-    logSecurityEvent('data_export', {
-      userId: user.id,
-      ip: getClientIp(req),
     }).catch(() => {});
 
-    return NextResponse.json({
+    return ok({
       success: true,
       data: exportData,
     });
-  } catch (error) {
-    return handleApiError(error, 'export_data');
-  }
-}
+  }, { stepUpMessage: 'step-up required', stepUpStatus: 403 }),
+  { unauthorizedMessage: 'Unauthorized' }
+);
+
+export const GET = wrapRoute(async function GET(req) {
+  const rateLimitResponse = checkRateLimit(req, { limit: 3, windowMinutes: 60 });
+  if (rateLimitResponse) return rateLimitResponse;
+
+  return await getHandler(req);
+}, (error) => handleApiError(error, 'export_data'));
 

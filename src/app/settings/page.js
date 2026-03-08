@@ -21,6 +21,7 @@ import {
   resetCookieConsent,
   COOKIE_CATEGORIES,
 } from '@/lib/cookie-consent';
+import { performStepUp, isStepUpRequired } from '@/lib/step-up';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -190,17 +191,22 @@ export default function SettingsPage() {
 
     setIsRevokingSessions(true);
     try {
-      const res = await fetch('/api/settings/sessions', {
+      let res = await fetch('/api/settings/sessions', {
         method: 'DELETE',
         credentials: 'include',
       });
-
-      const json = await res.json();
+      let json = await res.json();
+      if (isStepUpRequired(res, json)) {
+        if (!(await performStepUp())) return;
+        res = await fetch('/api/settings/sessions', {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+        json = await res.json();
+      }
       if (json.success) {
         toast.success('all sessions revoked. please log in again.');
-        setTimeout(() => {
-          router.push('/login');
-        }, 2000);
+        router.replace('/login');
       } else {
         toast.error(json.message || 'failed to revoke sessions');
       }
@@ -214,8 +220,13 @@ export default function SettingsPage() {
   const handleExportData = async () => {
     setIsExporting(true);
     try {
-      const res = await fetch('/api/settings/export-data', { credentials: 'include' });
-      const json = await res.json();
+      let res = await fetch('/api/settings/export-data', { credentials: 'include' });
+      let json = await res.json();
+      if (isStepUpRequired(res, json)) {
+        if (!(await performStepUp())) return;
+        res = await fetch('/api/settings/export-data', { credentials: 'include' });
+        json = await res.json();
+      }
       if (json.success) {
         const dataStr = JSON.stringify(json.data, null, 2);
         const dataBlob = new Blob([dataStr], { type: 'application/json' });
@@ -445,9 +456,9 @@ export default function SettingsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Monitor className="w-5 h-5" />
-                  Active Sessions
+                  Sign-in activity
                 </CardTitle>
-                <CardDescription>manage your active sessions and devices</CardDescription>
+                <CardDescription>recent logins and sign out events. revoke invalidates all tokens and logs you out everywhere.</CardDescription>
               </CardHeader>
               <CardContent>
                 {isLoadingSessions ? (
@@ -457,19 +468,36 @@ export default function SettingsPage() {
                 ) : (
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      {sessions.slice(0, 5).map((session) => (
-                        <div key={session.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex-1">
-                            <div className="font-medium">{session.userAgent || 'unknown device'}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {session.ip} • {new Date(session.timestamp).toLocaleString()}
+                      {sessions.slice(0, 10).map((session) => {
+                        const eventLabel = session.event === 'login_success'
+                          ? 'signed in'
+                          : session.event === 'logout'
+                            ? 'signed out'
+                            : session.event === 'all_sessions_revoked'
+                              ? 'all sessions revoked'
+                              : session.event === 'password_changed'
+                                ? 'password changed'
+                                : session.event;
+                        const shortAgent = (session.userAgent || 'unknown')
+                          .replace(/Mozilla\/[\d.]+ \([^)]+\) /, '')
+                          .split(' ')[0] || session.userAgent || 'unknown';
+                        return (
+                          <div key={session.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium capitalize">{eventLabel}</div>
+                              <div className="text-sm text-muted-foreground truncate" title={session.userAgent}>
+                                {shortAgent}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {session.ip} • {new Date(session.timestamp).toLocaleString()}
+                              </div>
                             </div>
+                            {session.isCurrent && (
+                              <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded shrink-0">current</span>
+                            )}
                           </div>
-                          {session.isCurrent && (
-                            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">current</span>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     <Button
                       variant="destructive"

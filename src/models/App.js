@@ -41,11 +41,54 @@ const AppSchema = new Schema(
       type: Number,
       default: 10,
       min: 1,
-      max: 120,
+      max: 100,
     },
     autoSuspendOnRateLimitAbuse: {
       type: Boolean,
       default: false,
+    },
+    quotaSuspended: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    quotaSuspendedMonth: {
+      type: String,
+      default: null,
+    },
+    suspensionReason: {
+      type: String,
+      enum: ['none', 'admin', 'plan_quota'],
+      default: 'none',
+      index: true,
+    },
+    partnerLicenseConfig: {
+      enabled: {
+        type: Boolean,
+        default: false,
+      },
+      mask: {
+        type: String,
+        default: '*****-****',
+        maxlength: 64,
+        trim: true,
+      },
+      lowercase: {
+        type: Boolean,
+        default: true,
+      },
+      uppercase: {
+        type: Boolean,
+        default: true,
+      },
+      numbers: {
+        type: Boolean,
+        default: true,
+      },
+      symbols: {
+        type: Boolean,
+        default: false,
+      },
     },
   },
   { timestamps: true }

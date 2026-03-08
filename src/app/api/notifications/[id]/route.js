@@ -1,48 +1,66 @@
-import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
-import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
 import Notification from '@/models/Notification';
-import { sanitizeObjectId } from '@/lib/sanitize';
-import { handleApiError } from '@/lib/errors';
+import { sanitizeObjectId } from '@/lib/security';
+import { handleApiError } from '@/lib/security';
+import { fail, ok, withAuth, wrapRoute } from '@/lib/http';
 
-export async function PATCH(req, { params }) {
+const patchHandler = withAuth(async (req, user, { params }) => {
+  const { id } = await params;
+  const notifId = id ? sanitizeObjectId(id) : null;
+  if (!notifId) {
+    return fail('invalid notification id', 400);
+  }
+
+  await connectDB();
+
+  const notif = await Notification.findOne({ _id: notifId, userId: user.id });
+  if (!notif) {
+    return fail('notification not found', 404);
+  }
+
+  const body = await req.json();
+  if (body?.isRead === true) {
+    notif.isRead = true;
+    await notif.save();
+  }
+
+  return ok({
+    success: true,
+    data: {
+      id: notif._id.toString(),
+      isRead: notif.isRead,
+    },
+  });
+}, { unauthorizedMessage: 'Unauthorized' });
+
+const deleteHandler = withAuth(async (_req, user, { params }) => {
+  const { id } = await params;
+  const notifId = id ? sanitizeObjectId(id) : null;
+  if (!notifId) {
+    return fail('invalid notification id', 400);
+  }
+
+  await connectDB();
+
+  const result = await Notification.deleteOne({ _id: notifId, userId: user.id });
+  if (result.deletedCount === 0) {
+    return fail('notification not found', 404);
+  }
+
+  return ok({ success: true, data: { deleted: true } });
+}, { unauthorizedMessage: 'Unauthorized' });
+
+export const PATCH = wrapRoute(async function PATCH(req, { params }) {
   const rateLimited = checkRateLimit(req, { limit: 30, windowMinutes: 1 });
   if (rateLimited) return rateLimited;
 
-  try {
-    const user = await authenticateUser(req);
-    if (!user) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-    }
+  return await patchHandler(req, { params });
+}, (error) => handleApiError(error, 'notifications_update'));
 
-    const { id } = await params;
-    const notifId = id ? sanitizeObjectId(id) : null;
-    if (!notifId) {
-      return NextResponse.json({ success: false, message: 'invalid notification id' }, { status: 400 });
-    }
+export const DELETE = wrapRoute(async function DELETE(req, { params }) {
+  const rateLimited = checkRateLimit(req, { limit: 30, windowMinutes: 1 });
+  if (rateLimited) return rateLimited;
 
-    await connectDB();
-
-    const notif = await Notification.findOne({ _id: notifId, userId: user.id });
-    if (!notif) {
-      return NextResponse.json({ success: false, message: 'notification not found' }, { status: 404 });
-    }
-
-    const body = await req.json();
-    if (body?.isRead === true) {
-      notif.isRead = true;
-      await notif.save();
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        id: notif._id.toString(),
-        isRead: notif.isRead,
-      },
-    });
-  } catch (error) {
-    return handleApiError(error, 'notifications_update');
-  }
-}
+  return await deleteHandler(req, { params });
+}, (error) => handleApiError(error, 'notifications_delete'));

@@ -1,11 +1,10 @@
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { connectDB } from '@/lib/db';
-import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getAuthRateLimit } from '@/config/ratelimits';
+import { getAuthRateLimit } from '@/lib/ratelimit';
 import User from '@/models/User';
-import { handleApiError } from '@/lib/errors';
+import { handleApiError } from '@/lib/security';
+import { fail, ok, withAuth, wrapRoute } from '@/lib/http';
 
 const preferencesSchema = z.object({
   notifications: z.object({
@@ -15,76 +14,61 @@ const preferencesSchema = z.object({
   }).optional(),
 }).strict();
 
-export async function GET(req) {
+const getHandler = withAuth(async (_req, user) => {
+  await connectDB();
+  const userDoc = await User.findById(user.id).select('preferences').lean();
+
+  return ok({
+    success: true,
+    data: {
+      preferences: userDoc?.preferences || {
+        notifications: {
+          loginAlerts: true,
+          passwordChange: true,
+          sessionRevoked: true,
+        },
+      },
+    },
+  });
+}, { unauthorizedMessage: 'Unauthorized' });
+
+const patchHandler = withAuth(async (req, user) => {
+  await connectDB();
+  const body = await req.json();
+  const validated = preferencesSchema.parse(body);
+
+  // update preferences
+  const updateData = {};
+  if (validated.notifications) {
+    updateData['preferences.notifications'] = validated.notifications;
+  }
+
+  await User.findByIdAndUpdate(user.id, {
+    $set: updateData,
+  });
+
+  return ok({
+    success: true,
+    message: 'preferences updated',
+  });
+}, { unauthorizedMessage: 'Unauthorized' });
+
+export const GET = wrapRoute(async function GET(req) {
   const rateLimitResponse = checkRateLimit(req, getAuthRateLimit('me'));
   if (rateLimitResponse) return rateLimitResponse;
 
-  try {
-    const user = await authenticateUser(req);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    await connectDB();
-    const userDoc = await User.findById(user.id).select('preferences').lean();
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        preferences: userDoc?.preferences || {
-          notifications: {
-            loginAlerts: true,
-            passwordChange: true,
-            sessionRevoked: true,
-          },
-        },
-      },
-    });
-  } catch (error) {
-    return handleApiError(error, 'get_preferences');
-  }
-}
+  return await getHandler(req);
+}, (error) => handleApiError(error, 'get_preferences'));
 
 export async function PATCH(req) {
   const rateLimitResponse = checkRateLimit(req, { limit: 10, windowMinutes: 1 });
   if (rateLimitResponse) return rateLimitResponse;
 
   try {
-    const user = await authenticateUser(req);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    await connectDB();
-    const body = await req.json();
-    const validated = preferencesSchema.parse(body);
-
-    // update preferences
-    const updateData = {};
-    if (validated.notifications) {
-      updateData['preferences.notifications'] = validated.notifications;
-    }
-
-    await User.findByIdAndUpdate(user.id, {
-      $set: updateData,
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: 'preferences updated',
-    });
+    return await patchHandler(req);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { success: false, message: error.errors[0].message },
-        { status: 400 }
-      );
+      return fail(error.errors[0].message, 400);
     }
     return handleApiError(error, 'update_preferences');
   }

@@ -1,28 +1,31 @@
-import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
-import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
 import Notification from '@/models/Notification';
-import { handleApiError } from '@/lib/errors';
+import { sanitizeObjectId } from '@/lib/security';
+import { handleApiError } from '@/lib/security';
+import { ok, parseJson, withAuth, wrapRoute } from '@/lib/http';
 
-export async function POST(req) {
+const postHandler = withAuth(async (req, user) => {
+  await connectDB();
+
+  const body = await parseJson(req);
+  const appId = sanitizeObjectId(body?.appId);
+
+  const query = { userId: user.id, isRead: false };
+  if (appId) query.appId = appId;
+
+  const result = await Notification.updateMany(query, { $set: { isRead: true } });
+
+  return ok({
+    success: true,
+    message: 'all marked read',
+    data: { modifiedCount: result.modifiedCount },
+  });
+}, { unauthorizedMessage: 'Unauthorized' });
+
+export const POST = wrapRoute(async function POST(req) {
   const rateLimited = checkRateLimit(req, { limit: 10, windowMinutes: 1 });
   if (rateLimited) return rateLimited;
 
-  try {
-    const user = await authenticateUser(req);
-    if (!user) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-    }
-
-    await connectDB();
-    await Notification.updateMany(
-      { userId: user.id, isRead: false },
-      { $set: { isRead: true } }
-    );
-
-    return NextResponse.json({ success: true, message: 'all marked read' });
-  } catch (error) {
-    return handleApiError(error, 'notifications_mark_all');
-  }
-}
+  return await postHandler(req);
+}, (error) => handleApiError(error, 'notifications_mark_all'));

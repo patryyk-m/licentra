@@ -1,12 +1,14 @@
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import Stripe from 'stripe';
 import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import User from '@/models/User';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getStripeRateLimit } from '@/config/ratelimits';
-import { handleApiError } from '@/lib/errors';
+import { getStripeRateLimit } from '@/lib/ratelimit';
+import { handleApiError } from '@/lib/security';
+import { requireStepUp } from '@/lib/auth-cookies';
+import { SECURITY_EVENTS, logAdminAction } from '@/lib/security';
+import { ok, fail } from '@/lib/http';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: '2024-11-20.acacia',
@@ -23,10 +25,12 @@ export async function POST(req) {
   try {
     const user = await authenticateUser(req);
     if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
+      return fail('Unauthorized', 401);
+    }
+
+    const stepUpOk = await requireStepUp(req, user);
+    if (!stepUpOk) {
+      return fail('step-up required', 403);
     }
 
     await connectDB();
@@ -35,18 +39,12 @@ export async function POST(req) {
 
     const userDoc = await User.findById(user.id);
     if (!userDoc) {
-      return NextResponse.json(
-        { success: false, message: 'user not found' },
-        { status: 404 }
-      );
+      return fail('user not found', 404);
     }
 
     const subscriptionId = userDoc.subscription?.stripeSubscriptionId;
     if (!subscriptionId) {
-      return NextResponse.json(
-        { success: false, message: 'no active subscription found' },
-        { status: 404 }
-      );
+      return fail('no active subscription found', 404);
     }
 
     // get current subscription from stripe
@@ -60,19 +58,13 @@ export async function POST(req) {
                        (currentPriceId === process.env.STRIPE_PRICE_BUSINESS || currentPriceId === process.env.STRIPE_PRICE_BUSINESS_ANNUAL) ? 'business' : null;
 
     if (!currentPlan) {
-      return NextResponse.json(
-        { success: false, message: 'could not determine current plan' },
-        { status: 400 }
-      );
+      return fail('could not determine current plan', 400);
     }
 
     // check if billing cycle is actually changing
     const isChangingToAnnual = validated.billingCycle === 'annual';
     if (isCurrentAnnual === isChangingToAnnual) {
-      return NextResponse.json(
-        { success: false, message: `already on ${validated.billingCycle} billing` },
-        { status: 400 }
-      );
+      return fail(`already on ${validated.billingCycle} billing`, 400);
     }
 
     // determine target price id
@@ -88,10 +80,7 @@ export async function POST(req) {
     }
 
     if (!targetPriceId) {
-      return NextResponse.json(
-        { success: false, message: 'price configuration error' },
-        { status: 500 }
-      );
+      return fail('price configuration error', 500);
     }
 
     const customerId = typeof subscription.customer === 'string' 
@@ -119,7 +108,16 @@ export async function POST(req) {
       },
     });
 
-    return NextResponse.json({
+    await logAdminAction({
+      actorUserId: user.id,
+      action: SECURITY_EVENTS.BILLING_CYCLE_CHANGED,
+      targetType: 'subscription',
+      targetId: subscriptionId,
+      metadata: { billingCycle: validated.billingCycle, plan: currentPlan },
+      req,
+    });
+
+    return ok({
       success: true,
       message: `billing cycle will switch to ${validated.billingCycle} at the end of your current billing period`,
       data: {
@@ -130,10 +128,7 @@ export async function POST(req) {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { success: false, message: error.errors[0].message },
-        { status: 400 }
-      );
+      return fail(error.errors[0].message, 400);
     }
     return handleApiError(error, 'change_billing_cycle');
   }

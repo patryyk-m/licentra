@@ -4,40 +4,36 @@ import { authenticateUser } from '@/middleware/auth';
 import License from '@/models/License';
 import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getLicenseRateLimit } from '@/config/ratelimits';
+import { getLicenseRateLimit } from '@/lib/ratelimit';
 import { hasAppAccess } from '@/lib/authz';
-import { sanitizeObjectId, sanitizeForDb } from '@/lib/sanitize';
-import { handleApiError } from '@/lib/errors';
+import { sanitizeObjectId, sanitizeForDb } from '@/lib/security';
+import { handleApiError } from '@/lib/security';
+import { fail, wrapRoute } from '@/lib/http';
 
-export async function PATCH(req, { params }) {
+export const PATCH = wrapRoute(async function PATCH(req, { params }) {
   const rateLimited = checkRateLimit(req, getLicenseRateLimit('update'));
   if (rateLimited) return rateLimited;
-
-  try {
-    const user = await authenticateUser(req);
-    if (!user || !['developer', 'admin'].includes(user.role)) {
-      return NextResponse.json(
-        { success: false, message: 'Forbidden: insufficient permissions' },
-        { status: 403 }
-      );
-    }
+  const user = await authenticateUser(req);
+  if (!user || !['developer', 'admin'].includes(user.role)) {
+    return fail('Forbidden: insufficient permissions', 403);
+  }
 
     const { id } = await params;
     const licenseId = id ? sanitizeObjectId(id) : null;
     if (!licenseId) {
-      return NextResponse.json({ success: false, message: 'invalid license id' }, { status: 400 });
+      return fail('invalid license id', 400);
     }
 
     await connectDB();
     const license = await License.findById(licenseId).populate('appId');
     if (!license) {
-      return NextResponse.json({ success: false, message: 'license not found' }, { status: 404 });
+      return fail('license not found', 404);
     }
 
     const app = license.appId;
     const hasAccess = hasAppAccess(app, user);
     if (!hasAccess) {
-      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+      return fail('Forbidden', 403);
     }
 
     const isAdmin = user.role === 'admin';
@@ -47,7 +43,7 @@ export async function PATCH(req, { params }) {
       : false;
 
     if (!isAdmin && !isOwner && !isCollaborator) {
-      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+      return fail('Forbidden', 403);
     }
 
     const body = await req.json();
@@ -58,7 +54,7 @@ export async function PATCH(req, { params }) {
       if (s === 'suspended' || s === 'active') {
         mongooseUpdate.status = s;
       } else {
-        return NextResponse.json({ success: false, message: 'invalid status' }, { status: 400 });
+        return fail('invalid status', 400);
       }
     }
 
@@ -69,7 +65,7 @@ export async function PATCH(req, { params }) {
       } else {
         const expiryDate = new Date(body.expiryDate);
         if (isNaN(expiryDate.getTime())) {
-          return NextResponse.json({ success: false, message: 'invalid expiry date' }, { status: 400 });
+          return fail('invalid expiry date', 400);
         }
         mongooseUpdate.expiryDate = expiryDate;
       }
@@ -83,10 +79,7 @@ export async function PATCH(req, { params }) {
     if (body.hwidLimit !== undefined) {
       const parsedLimit = Number(body.hwidLimit);
       if (!Number.isFinite(parsedLimit) || parsedLimit < 1 || parsedLimit > 5) {
-        return NextResponse.json(
-          { success: false, message: 'hwid limit must be between 1 and 5' },
-          { status: 400 }
-        );
+        return fail('hwid limit must be between 1 and 5', 400);
       }
       mongooseUpdate.hwidLimit = Math.floor(parsedLimit);
     }
@@ -95,7 +88,7 @@ export async function PATCH(req, { params }) {
     if (body.clearHwidIndex !== undefined) {
       const index = parseInt(body.clearHwidIndex);
       if (isNaN(index) || index < 0) {
-        return NextResponse.json({ success: false, message: 'invalid hwid index' }, { status: 400 });
+        return fail('invalid hwid index', 400);
       }
       const hwids = (license.hwids || []).filter((_, i) => i !== index);
       mongooseUpdate.hwids = hwids;
@@ -109,7 +102,7 @@ export async function PATCH(req, { params }) {
     }
 
     if (Object.keys(mongooseUpdate).length === 0) {
-      return NextResponse.json({ success: false, message: 'no updates provided' }, { status: 400 });
+      return fail('no updates provided', 400);
     }
     
     await License.updateOne({ _id: licenseId }, { $set: mongooseUpdate });
@@ -117,26 +110,23 @@ export async function PATCH(req, { params }) {
     // reload the license to return updated data
     const updatedLicense = await License.findById(licenseId);
 
-    return NextResponse.json({
-      success: true,
-      message: 'license updated',
-      data: {
-        license: {
-          id: updatedLicense._id.toString(),
-          key: updatedLicense.key,
-          note: updatedLicense.note || '',
-          hwids: Array.isArray(updatedLicense.hwids) ? updatedLicense.hwids : [],
-          hwidLocked: updatedLicense.hwidLocked,
-          hwidLimit: updatedLicense.hwidLimit ?? null,
-          expiryDate: updatedLicense.expiryDate || null,
-          status: updatedLicense.status,
-          createdAt: updatedLicense.createdAt,
-          updatedAt: updatedLicense.updatedAt,
-        },
+  return NextResponse.json({
+    success: true,
+    message: 'license updated',
+    data: {
+      license: {
+        id: updatedLicense._id.toString(),
+        key: updatedLicense.key,
+        note: updatedLicense.note || '',
+        hwids: Array.isArray(updatedLicense.hwids) ? updatedLicense.hwids : [],
+        hwidLocked: updatedLicense.hwidLocked,
+        hwidLimit: updatedLicense.hwidLimit ?? null,
+        expiryDate: updatedLicense.expiryDate || null,
+        status: updatedLicense.status,
+        createdAt: updatedLicense.createdAt,
+        updatedAt: updatedLicense.updatedAt,
       },
-    });
-  } catch (error) {
-    return handleApiError(error, 'licenses_update');
-  }
-}
+    },
+  });
+}, (error) => handleApiError(error, 'licenses_update'));
 

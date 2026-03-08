@@ -5,23 +5,23 @@ import License from '@/models/License';
 import App from '@/models/App';
 import ApiUsage from '@/models/ApiUsage';
 import Notification from '@/models/Notification';
+import User from '@/models/User';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getLicenseRateLimit } from '@/config/ratelimits';
-import { ROLE } from '@/lib/roles';
+import { getLicenseRateLimit } from '@/lib/ratelimit';
+import { ROLE } from '@/lib/authz';
 import { hasAppAccess } from '@/lib/authz';
-import { sanitizeObjectId } from '@/lib/sanitize';
-import { logAccessEvent, SECURITY_EVENTS } from '@/lib/security-logger';
-import { handleApiError } from '@/lib/errors';
+import { sanitizeObjectId } from '@/lib/security';
+import { logAccessEvent, SECURITY_EVENTS } from '@/lib/security';
+import { handleApiError } from '@/lib/security';
+import { fail, wrapRoute } from '@/lib/http';
 
-export async function GET(req) {
+export const GET = wrapRoute(async function GET(req) {
   const rateLimited = checkRateLimit(req, getLicenseRateLimit('list'));
   if (rateLimited) return rateLimited;
-
-  try {
-    const user = await authenticateUser(req);
-    if (!user) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-    }
+  const user = await authenticateUser(req);
+  if (!user) {
+    return fail('Unauthorized', 401);
+  }
 
     await connectDB();
     const { searchParams } = new URL(req.url);
@@ -29,12 +29,26 @@ export async function GET(req) {
     const appId = rawAppId ? sanitizeObjectId(rawAppId) : null;
 
     if (!appId) {
-      return NextResponse.json({ success: false, message: 'appId required' }, { status: 400 });
+      return fail('appId required', 400);
     }
 
     const app = await App.findById(appId);
-    if (!app || app.status === 'suspended') {
-      return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
+    if (!app) {
+      return fail('app not found', 404);
+    }
+
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    if (
+      app.status === 'suspended' &&
+      (app.suspensionReason === 'plan_quota' || app.quotaSuspended) &&
+      app.quotaSuspendedMonth !== monthKey
+    ) {
+      app.status = 'active';
+      app.quotaSuspended = false;
+      app.quotaSuspendedMonth = null;
+      app.suspensionReason = 'none';
+      await app.save();
     }
 
     const developerAppIds = Array.isArray(user.developerApps) ? user.developerApps : [];
@@ -48,7 +62,7 @@ export async function GET(req) {
 
     if (!hasAccess) {
       logAccessEvent(SECURITY_EVENTS.ACCESS_DENIED, user.id, `app:${app._id}:licenses`, req, 'no_app_access').catch(() => {});
-      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+      return fail('Forbidden', 403);
     }
 
     const licenseQuery = { appId: app._id };
@@ -62,6 +76,18 @@ export async function GET(req) {
     if (licenses.length === 0) {
       return NextResponse.json({ success: true, data: { licenses: [] } });
     }
+
+    const creatorIds = [
+      ...new Set(
+        licenses
+          .map((l) => l.createdBy?.toString?.())
+          .filter(Boolean)
+      ),
+    ];
+    const creators = creatorIds.length
+      ? await User.find({ _id: { $in: creatorIds } }).select('username').lean()
+      : [];
+    const creatorMap = new Map(creators.map((u) => [u._id.toString(), u.username || '']));
 
     // get usage stats for all licenses
     const licenseIds = licenses.map(l => l._id);
@@ -127,6 +153,9 @@ export async function GET(req) {
         })
         .reduce((sum, r) => sum + (r.count || 0), 0);
 
+      const createdById = l.createdBy?.toString?.() || '';
+      const createdByUsername = createdById ? creatorMap.get(createdById) || '' : '';
+
       return {
         id: l._id.toString(),
         key: l.key || '',
@@ -138,6 +167,8 @@ export async function GET(req) {
         status: l.status,
         createdAt: l.createdAt,
         updatedAt: l.updatedAt,
+        createdById,
+        createdByUsername,
         isExpired: l.expiryDate ? new Date(l.expiryDate) < new Date() : false,
         hasRateLimitAlert: licenseIdsWithAlerts.has(licenseIdStr),
         usage: {
@@ -148,10 +179,7 @@ export async function GET(req) {
       };
     });
 
-    return NextResponse.json({ success: true, data: { licenses: sanitized } });
-  } catch (error) {
-    return handleApiError(error, 'licenses_list');
-  }
-}
+  return NextResponse.json({ success: true, data: { licenses: sanitized } });
+}, (error) => handleApiError(error, 'licenses_list'));
 
 
