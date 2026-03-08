@@ -393,19 +393,20 @@ export async function logSecurityEvent(event, details = {}) {
 
   try {
     const SecurityLog = (await import('../models/SecurityLog.js')).default;
-    await SecurityLog.create({
-      userId: details.userId || null,
+    const doc = {
       event,
       ip: details.ip || 'unknown',
       userAgent: details.userAgent || 'unknown',
       resource: details.resource || '',
       reason: details.reason || '',
       details,
-    }).catch(() => {
-      // ignore database errors in logging
-    });
+    };
+    if (details.userId != null && details.userId !== '') {
+      doc.userId = details.userId;
+    }
+    await SecurityLog.create(doc).catch(() => {});
   } catch {
-    // ignore errors
+    // ignore
   }
 }
 
