@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, Info, ArrowRight, CheckCheck, Lock, Settings2, Shield } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCheck, Info, Lock, Settings2, Shield, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const severityIcons = { info: Info, warning: AlertTriangle, critical: AlertTriangle };
-const severityColors = { info: '', warning: 'text-amber-500', critical: 'text-red-500' };
+const severityColors = { info: 'text-blue-500', warning: 'text-amber-500', critical: 'text-red-500' };
 
 export default function AppSecurityTab({ appId }) {
   const [notifications, setNotifications] = useState([]);
@@ -17,6 +17,8 @@ export default function AppSecurityTab({ appId }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [lockingId, setLockingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [deletingAll, setDeletingAll] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -64,15 +66,65 @@ export default function AppSecurityTab({ appId }) {
       const res = await fetch('/api/notifications/mark-all-read', {
         method: 'POST',
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appId }),
       });
-      if (res.ok) {
+      const json = await res.json();
+      if (json.success) {
         toast.success('all marked read');
         fetchData();
       } else {
-        toast.error('failed to mark all read');
+        toast.error(json.message || 'failed to mark all read');
       }
     } catch {
       toast.error('failed to mark all read');
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (!appId) return;
+    if (!confirm('delete all notifications for this app?')) return;
+    setDeletingAll(true);
+    try {
+      const res = await fetch('/api/notifications/delete-all', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appId }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success('all notifications deleted');
+        fetchData();
+      } else {
+        toast.error(json.message || 'failed to delete all');
+      }
+    } catch {
+      toast.error('failed to delete all');
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!id) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/notifications/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success('notification deleted');
+        fetchData();
+      } else {
+        toast.error(json.message || 'failed to delete');
+      }
+    } catch {
+      toast.error('failed to delete notification');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -128,14 +180,30 @@ export default function AppSecurityTab({ appId }) {
               <Shield className="w-5 h-5" />
               Security alerts
             </CardTitle>
-            <CardDescription>rate limit and security events for this app</CardDescription>
+            <CardDescription>
+              rate limit and security events for this app. &quot;blocked (429)&quot; = requests that exceeded per-minute limit and got rejected. license auto-suspends when 50+ blocked in 10 min.
+            </CardDescription>
           </div>
-          {unreadCount > 0 && (
-            <Button variant="outline" size="sm" onClick={handleMarkAllRead} className="gap-2">
-              <CheckCheck className="w-4 h-4" />
-              mark all read
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {unreadCount > 0 && (
+              <Button variant="outline" size="sm" onClick={handleMarkAllRead} className="gap-2">
+                <CheckCheck className="w-4 h-4" />
+                mark all read
+              </Button>
+            )}
+            {notifications.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDeleteAll}
+                disabled={deletingAll}
+                className="gap-2 text-destructive hover:text-destructive"
+              >
+                <Trash2 className="w-4 h-4" />
+                {deletingAll ? 'deleting...' : 'delete all'}
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -167,7 +235,7 @@ export default function AppSecurityTab({ appId }) {
         ) : (
           <div className="space-y-4">
             {notifications.map((n) => {
-              const Icon = severityIcons[n.severity] || Info;
+              const Icon = severityIcons[n.severity] || AlertTriangle;
               return (
                 <div
                   key={n.id}
@@ -186,7 +254,7 @@ export default function AppSecurityTab({ appId }) {
                       {n.metadata?.rateLimitedCount != null && (
                         <div className="mt-2 text-xs text-muted-foreground space-y-1">
                           <p>
-                            {n.metadata.rateLimitedCount} rate-limited requests from {n.metadata.uniqueIpCount} IPs
+                            {n.metadata.rateLimitedCount} blocked (429) requests from {n.metadata.uniqueIpCount} IP{Number(n.metadata.uniqueIpCount) !== 1 ? 's' : ''}
                             {n.metadata.timeWindow && ` (${n.metadata.timeWindow})`}
                           </p>
                           {Array.isArray(n.metadata.topIps) && n.metadata.topIps.length > 0 && (
@@ -227,6 +295,17 @@ export default function AppSecurityTab({ appId }) {
                           </Button>
                         </>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(n.id)}
+                        disabled={deletingId === n.id}
+                        className="text-muted-foreground hover:text-destructive"
+                        aria-label="delete notification"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        {deletingId === n.id ? '...' : ''}
+                      </Button>
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">

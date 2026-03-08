@@ -2,50 +2,50 @@ import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getInviteRateLimit } from '@/config/ratelimits';
+import { getInviteRateLimit } from '@/lib/ratelimit';
 import App from '@/models/App';
 import User from '@/models/User';
 import AppInvite from '@/models/AppInvite';
+import PartnerCredit from '@/models/PartnerCredit';
 import { hasAppAccess } from '@/lib/authz';
-import { cleanupAppInvites } from '@/lib/maintenance';
-import { sanitizeObjectId } from '@/lib/sanitize';
-import { handleApiError } from '@/lib/errors';
+import { cleanupAppInvites } from '../_lib';
+import { sanitizeObjectId } from '@/lib/security';
+import { handleApiError } from '@/lib/security';
+import { fail, wrapRoute } from '@/lib/http';
 
-export async function GET(req, { params }) {
+export const GET = wrapRoute(async function GET(req, { params }) {
   const rateLimited = checkRateLimit(req, getInviteRateLimit('list'));
   if (rateLimited) return rateLimited;
-
-  try {
-    const user = await authenticateUser(req);
-    if (!user) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-    }
+  const user = await authenticateUser(req);
+  if (!user) {
+    return fail('Unauthorized', 401);
+  }
 
     const { id } = await params;
     const appId = id ? sanitizeObjectId(id) : null;
     if (!appId) {
-      return NextResponse.json({ success: false, message: 'invalid app id' }, { status: 400 });
+      return fail('invalid app id', 400);
     }
 
     await connectDB();
     const app = await App.findById(appId).lean();
-    if (!app || app.status === 'suspended') {
-      return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
+    if (!app) {
+      return fail('app not found', 404);
     }
 
     const hasAccess = hasAppAccess(app, user);
     if (!hasAccess) {
-      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+      return fail('Forbidden', 403);
     }
 
-    const canManage = user.role === 'admin' || app.ownerId?.toString() === user.id;
-    if (!canManage) {
-      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+    const canViewMembers = user.role !== 'partner';
+    if (!canViewMembers) {
+      return fail('Forbidden', 403);
     }
 
     await cleanupAppInvites(app._id);
 
-    const [partners, collaborators, invites] = await Promise.all([
+    const [partners, collaborators, invites, partnerCredits] = await Promise.all([
       User.find({
         role: 'partner',
         partnerApps: app._id,
@@ -59,6 +59,7 @@ export async function GET(req, { params }) {
         .select('username email createdAt updatedAt')
         .lean(),
       AppInvite.find({ appId: app._id }).sort({ createdAt: -1 }).lean(),
+      PartnerCredit.find({ appId: app._id }).select('userId balance').lean(),
     ]);
 
     const now = new Date();
@@ -84,11 +85,16 @@ export async function GET(req, { params }) {
       }
     });
 
+    const partnerCreditsMap = new Map(
+      partnerCredits.map((credit) => [credit.userId?.toString(), Number(credit.balance || 0)])
+    );
+
     const partnerPayload = partners.map((partner) => ({
       id: partner._id.toString(),
       username: partner.username,
       email: partner.email,
       joinedAt: joinDateMap.get(partner._id.toString()) || partner.createdAt,
+      credits: partnerCreditsMap.get(partner._id.toString()) || 0,
     }));
 
     const invitePayload = invites.map((invite) => {
@@ -116,21 +122,18 @@ export async function GET(req, { params }) {
       joinedAt: dev.updatedAt || dev.createdAt,
     }));
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        app: {
-          id: app._id.toString(),
-          name: app.name,
-        },
-        partners: partnerPayload,
-        collaborators: collaboratorPayload,
-        invites: invitePayload,
+  return NextResponse.json({
+    success: true,
+    data: {
+      app: {
+        id: app._id.toString(),
+        name: app.name,
       },
-    });
-  } catch (error) {
-    return handleApiError(error, 'invites_list');
-  }
-}
+      partners: partnerPayload,
+      collaborators: collaboratorPayload,
+      invites: invitePayload,
+    },
+  });
+}, (error) => handleApiError(error, 'invites_list'));
 
 

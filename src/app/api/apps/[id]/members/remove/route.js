@@ -2,30 +2,30 @@ import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getMemberRateLimit } from '@/config/ratelimits';
+import { getMemberRateLimit } from '@/lib/ratelimit';
 import App from '@/models/App';
 import User from '@/models/User';
+import PartnerCredit from '@/models/PartnerCredit';
 import { hasAppAccess } from '@/lib/authz';
-import { sanitizeObjectId } from '@/lib/sanitize';
-import { handleApiError } from '@/lib/errors';
+import { sanitizeObjectId } from '@/lib/security';
+import { handleApiError } from '@/lib/security';
+import { fail, parseJson, wrapRoute } from '@/lib/http';
 
-export async function POST(req, { params }) {
+export const POST = wrapRoute(async function POST(req, { params }) {
   const rateLimited = checkRateLimit(req, getMemberRateLimit('remove'));
   if (rateLimited) return rateLimited;
-
-  try {
-    const user = await authenticateUser(req);
-    if (!user) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-    }
+  const user = await authenticateUser(req);
+  if (!user) {
+    return fail('Unauthorized', 401);
+  }
 
     const { id } = await params;
     const appId = id ? sanitizeObjectId(id) : null;
     if (!appId) {
-      return NextResponse.json({ success: false, message: 'invalid app id' }, { status: 400 });
+      return fail('invalid app id', 400);
     }
 
-    const body = await req.json().catch(() => ({}));
+    const body = await parseJson(req, {});
     const rawMemberId = body?.memberId;
     const memberId = rawMemberId ? sanitizeObjectId(String(rawMemberId)) : null;
     const membershipType = body?.role?.toLowerCase() === 'partner' ? 'partner'
@@ -34,31 +34,28 @@ export async function POST(req, { params }) {
         : null;
 
     if (!memberId || !membershipType) {
-      return NextResponse.json(
-        { success: false, message: 'memberId and valid role are required' },
-        { status: 400 }
-      );
+      return fail('memberId and valid role are required', 400);
     }
 
     await connectDB();
     const app = await App.findById(appId);
-    if (!app || app.status === 'suspended') {
-      return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
+    if (!app) {
+      return fail('app not found', 404);
     }
 
     const hasAccess = hasAppAccess(app, user);
     if (!hasAccess) {
-      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+      return fail('Forbidden', 403);
     }
 
     if (membershipType === 'collaborator' && app.ownerId?.toString() === memberId) {
-      return NextResponse.json({ success: false, message: 'cannot remove the app owner' }, { status: 400 });
+      return fail('cannot remove the app owner', 400);
     }
 
     const canManage = user.role === 'admin' || app.ownerId?.toString() === user.id;
 
     if (!canManage) {
-      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+      return fail('Forbidden', 403);
     }
 
     if (membershipType === 'partner') {
@@ -67,7 +64,7 @@ export async function POST(req, { params }) {
         role: 'partner',
       });
       if (!member) {
-        return NextResponse.json({ success: false, message: 'partner not found' }, { status: 404 });
+        return fail('partner not found', 404);
       }
 
       const hasAccess =
@@ -75,10 +72,7 @@ export async function POST(req, { params }) {
         member.partnerApps.some((appRef) => appRef?.toString() === app._id.toString());
 
       if (!hasAccess) {
-        return NextResponse.json(
-          { success: false, message: 'partner is not assigned to this app' },
-          { status: 400 }
-        );
+        return fail('partner is not assigned to this app', 400);
       }
 
       await User.updateOne(
@@ -89,6 +83,7 @@ export async function POST(req, { params }) {
           },
         }
       );
+      await PartnerCredit.deleteOne({ appId: app._id, userId: memberId });
 
       return NextResponse.json({ success: true, message: 'partner removed from app' });
     }
@@ -98,7 +93,7 @@ export async function POST(req, { params }) {
       role: { $in: ['developer', 'admin'] },
     });
     if (!member) {
-      return NextResponse.json({ success: false, message: 'developer not found' }, { status: 404 });
+      return fail('developer not found', 404);
     }
 
     const hasDeveloperAccess = (member.developerApps || []).some(
@@ -106,10 +101,7 @@ export async function POST(req, { params }) {
     );
 
     if (!hasDeveloperAccess) {
-      return NextResponse.json(
-        { success: false, message: 'developer is not assigned to this app' },
-        { status: 400 }
-      );
+      return fail('developer is not assigned to this app', 400);
     }
 
     await User.updateOne(
@@ -117,10 +109,7 @@ export async function POST(req, { params }) {
       { $pull: { developerApps: app._id } }
     );
 
-    return NextResponse.json({ success: true, message: 'collaborator removed from app' });
-  } catch (error) {
-    return handleApiError(error, 'members_remove');
-  }
-}
+  return NextResponse.json({ success: true, message: 'collaborator removed from app' });
+}, (error) => handleApiError(error, 'members_remove'));
 
 

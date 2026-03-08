@@ -3,16 +3,17 @@ import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getInviteRateLimit } from '@/config/ratelimits';
+import { getInviteRateLimit } from '@/lib/ratelimit';
 import App from '@/models/App';
 import User from '@/models/User';
 import AppInvite from '@/models/AppInvite';
-import { getCollaboratorLimit, getPartnerLimit } from '@/lib/plans';
+import { getCollaboratorLimit, getPartnerLimit } from '@/lib/plan-limits';
 import { hasAppAccess } from '@/lib/authz';
-import { cleanupAppInvites } from '@/lib/maintenance';
-import { logAccessEvent, SECURITY_EVENTS } from '@/lib/security-logger';
-import { sanitizeObjectId } from '@/lib/sanitize';
-import { handleApiError } from '@/lib/errors';
+import { cleanupAppInvites } from '../_lib';
+import { logAccessEvent, SECURITY_EVENTS } from '@/lib/security';
+import { sanitizeObjectId } from '@/lib/security';
+import { handleApiError } from '@/lib/security';
+import { fail, parseJson, wrapRoute } from '@/lib/http';
 
 const MAX_ATTEMPTS = 5;
 
@@ -20,43 +21,41 @@ function generateCode() {
   return crypto.randomBytes(5).toString('hex').toUpperCase();
 }
 
-export async function POST(req, { params }) {
+export const POST = wrapRoute(async function POST(req, { params }) {
   const rateLimited = checkRateLimit(req, getInviteRateLimit('create'));
   if (rateLimited) return rateLimited;
-
-  try {
-    const user = await authenticateUser(req);
-    if (!user) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-    }
+  const user = await authenticateUser(req);
+  if (!user) {
+    return fail('Unauthorized', 401);
+  }
 
     const { id } = await params;
     const appId = id ? sanitizeObjectId(id) : null;
     if (!appId) {
-      return NextResponse.json({ success: false, message: 'invalid app id' }, { status: 400 });
+      return fail('invalid app id', 400);
     }
 
     await connectDB();
     const app = await App.findById(appId);
-    if (!app || app.status === 'suspended') {
-      return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
+    if (!app) {
+      return fail('app not found', 404);
     }
 
     const hasAccess = hasAppAccess(app, user);
     if (!hasAccess) {
       logAccessEvent(SECURITY_EVENTS.ACCESS_DENIED, user.id, `app:${app._id}`, req, 'no_app_access').catch(() => {});
-      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+      return fail('Forbidden', 403);
     }
 
     const canManage = user.role === 'admin' || app.ownerId?.toString() === user.id;
     if (!canManage) {
       logAccessEvent(SECURITY_EVENTS.ACCESS_DENIED, user.id, `app:${app._id}:invites`, req, 'insufficient_permissions').catch(() => {});
-      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+      return fail('Forbidden', 403);
     }
 
     await cleanupAppInvites(app._id);
 
-    const body = await req.json().catch(() => ({}));
+    const body = await parseJson(req, {});
     const requestedRole = typeof body?.role === 'string' ? body.role.trim().toLowerCase() : 'partner';
     const targetRole = requestedRole === 'collaborator' || requestedRole === 'developer'
       ? 'collaborator'
@@ -76,10 +75,7 @@ export async function POST(req, { params }) {
     }
 
     if (!code) {
-      return NextResponse.json(
-        { success: false, message: 'unable to generate invite code, try again' },
-        { status: 500 }
-      );
+      return fail('unable to generate invite code, try again', 500);
     }
 
     if (targetRole === 'collaborator') {
@@ -87,20 +83,22 @@ export async function POST(req, { params }) {
       const collaboratorLimit = getCollaboratorLimit(owner?.plan || 'free');
 
       if (collaboratorLimit >= 0) {
-        const collaboratorCount = await User.countDocuments({
-          role: 'developer',
-          developerApps: app._id,
-          _id: { $ne: app.ownerId },
-        });
+        const [collaboratorCount, activeInviteCount] = await Promise.all([
+          User.countDocuments({
+            role: { $in: ['developer', 'admin'] },
+            developerApps: app._id,
+            _id: { $ne: app.ownerId },
+          }),
+          AppInvite.countDocuments({
+            appId: app._id,
+            status: 'active',
+            targetRole: 'collaborator',
+          }),
+        ]);
 
-        if (collaboratorCount >= collaboratorLimit) {
-          return NextResponse.json(
-            {
-              success: false,
-              message: `developer invite limit reached for this plan (${collaboratorLimit})`,
-            },
-            { status: 403 }
-          );
+        const usedCapacity = collaboratorCount + activeInviteCount;
+        if (usedCapacity >= collaboratorLimit) {
+          return fail(`collaborator invite limit reached for this plan (${collaboratorLimit})`, 403);
         }
       }
     }
@@ -110,19 +108,21 @@ export async function POST(req, { params }) {
       const partnerLimit = getPartnerLimit(owner?.plan || 'free');
 
       if (partnerLimit >= 0) {
-        const partnerCount = await User.countDocuments({
-          role: 'partner',
-          partnerApps: app._id,
-        });
+        const [partnerCount, activeInviteCount] = await Promise.all([
+          User.countDocuments({
+            role: 'partner',
+            partnerApps: app._id,
+          }),
+          AppInvite.countDocuments({
+            appId: app._id,
+            status: 'active',
+            targetRole: 'partner',
+          }),
+        ]);
 
-        if (partnerCount >= partnerLimit) {
-          return NextResponse.json(
-            {
-              success: false,
-              message: `partner invite limit reached for this plan (${partnerLimit})`,
-            },
-            { status: 403 }
-          );
+        const usedCapacity = partnerCount + activeInviteCount;
+        if (usedCapacity >= partnerLimit) {
+          return fail(`partner invite limit reached for this plan (${partnerLimit})`, 403);
         }
       }
     }
@@ -135,22 +135,17 @@ export async function POST(req, { params }) {
       targetRole,
     });
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        invite: {
-          id: invite._id.toString(),
-          code: invite.code,
-          status: invite.status,
-          createdAt: invite.createdAt,
-          expiresAt: invite.expiresAt,
-          targetRole: invite.targetRole,
-        },
+  return NextResponse.json({
+    success: true,
+    data: {
+      invite: {
+        id: invite._id.toString(),
+        code: invite.code,
+        status: invite.status,
+        createdAt: invite.createdAt,
+        expiresAt: invite.expiresAt,
+        targetRole: invite.targetRole,
       },
-    });
-  } catch (error) {
-    return handleApiError(error, 'create_app_invite');
-  }
-}
-
-
+    },
+  });
+}, (error) => handleApiError(error, 'create_app_invite'));
