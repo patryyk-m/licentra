@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Copy, Download, Trash2, Pencil, RotateCcw } from 'lucide-react';
+import { performStepUp, isStepUpRequired } from '@/lib/step-up';
 
 export default function LicensesPage() {
   const params = useParams();
@@ -41,6 +42,8 @@ export default function LicensesPage() {
   const [hwidLimit, setHwidLimit] = useState(1);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshCooldown, setRefreshCooldown] = useState(0);
+  const [partnerCredits, setPartnerCredits] = useState(0);
+  const [partnerDefaults, setPartnerDefaults] = useState(null);
   
   // Edit form state
   const [editHwidLocked, setEditHwidLocked] = useState(false);
@@ -76,6 +79,13 @@ export default function LicensesPage() {
           return;
         }
         setApp(found);
+        setPartnerDefaults(found.partnerLicenseConfig || null);
+      }
+
+      const creditsRes = await fetch(`/api/apps/${appId}/partner-credits`, { credentials: 'include' });
+      const creditsJson = await creditsRes.json();
+      if (creditsJson.success) {
+        setPartnerCredits(Number(creditsJson.data?.myCredits || 0));
       }
 
       const res = await fetch(`/api/licenses/list?appId=${appId}`, { credentials: 'include' });
@@ -110,6 +120,19 @@ export default function LicensesPage() {
     }, 1000);
     return () => clearTimeout(timer);
   }, [refreshCooldown]);
+
+  useEffect(() => {
+    if (!user || !app || user.role !== 'partner') return;
+    const cfg = app.partnerLicenseConfig;
+    if (!cfg || !cfg.enabled) return;
+    setMask(cfg.mask || '*****-****');
+    setCharset({
+      lowercase: cfg.lowercase ?? true,
+      uppercase: cfg.uppercase ?? true,
+      numbers: cfg.numbers ?? true,
+      symbols: cfg.symbols ?? false,
+    });
+  }, [user, app]);
 
   const fetchLicenses = async () => {
     const res = await fetch(`/api/licenses/list?appId=${appId}`, { credentials: 'include' });
@@ -164,6 +187,11 @@ export default function LicensesPage() {
       return;
     }
 
+    if (user?.role === 'partner' && count > partnerCredits) {
+      toast.error('insufficient partner credits');
+      return;
+    }
+
     setCreating(true);
     try {
       const res = await fetch('/api/licenses/create', {
@@ -187,8 +215,7 @@ export default function LicensesPage() {
         toast.success(`${count} license(s) created`);
         setIsCreateOpen(false);
         setCount(1);
-        setMask('*****-****');
-        setCharset({ lowercase: true, uppercase: true, numbers: true, symbols: false });
+        // keep mask and charset so custom values persist when creating again (partners use partnerLicenseConfig)
         setNote('');
         setExpiryUnit('Days');
         setExpiryDuration(30);
@@ -200,6 +227,13 @@ export default function LicensesPage() {
           });
         }
         await fetchLicenses();
+        if (user?.role === 'partner') {
+          const creditsRes = await fetch(`/api/apps/${appId}/partner-credits`, { credentials: 'include' });
+          const creditsJson = await creditsRes.json();
+          if (creditsJson.success) {
+            setPartnerCredits(Number(creditsJson.data?.myCredits || 0));
+          }
+        }
       } else {
         toast.error(json.message || 'failed to create');
       }
@@ -214,11 +248,16 @@ export default function LicensesPage() {
     if (!licenseId) return;
     setSuspendingId(licenseId);
     try {
-      const res = await fetch(`/api/licenses/suspend/${licenseId}`, {
+      let res = await fetch(`/api/licenses/suspend/${licenseId}`, {
         method: 'POST',
         credentials: 'include',
       });
-      const json = await res.json();
+      let json = await res.json();
+      if (isStepUpRequired(res, json)) {
+        if (!(await performStepUp())) return;
+        res = await fetch(`/api/licenses/suspend/${licenseId}`, { method: 'POST', credentials: 'include' });
+        json = await res.json();
+      }
       if (json.success) {
         toast.success('license suspended');
         await fetchLicenses();
@@ -236,11 +275,16 @@ export default function LicensesPage() {
     if (!licenseId) return;
     setSuspendingId(licenseId);
     try {
-      const res = await fetch(`/api/licenses/reactivate/${licenseId}`, {
+      let res = await fetch(`/api/licenses/reactivate/${licenseId}`, {
         method: 'POST',
         credentials: 'include',
       });
-      const json = await res.json();
+      let json = await res.json();
+      if (isStepUpRequired(res, json)) {
+        if (!(await performStepUp())) return;
+        res = await fetch(`/api/licenses/reactivate/${licenseId}`, { method: 'POST', credentials: 'include' });
+        json = await res.json();
+      }
       if (json.success) {
         toast.success('license reactivated');
         await fetchLicenses();
@@ -256,11 +300,16 @@ export default function LicensesPage() {
 
   const handleDelete = async (licenseId) => {
     try {
-      const res = await fetch(`/api/licenses/delete/${licenseId}`, {
+      let res = await fetch(`/api/licenses/delete/${licenseId}`, {
         method: 'DELETE',
         credentials: 'include',
       });
-      const json = await res.json();
+      let json = await res.json();
+      if (isStepUpRequired(res, json)) {
+        if (!(await performStepUp())) return;
+        res = await fetch(`/api/licenses/delete/${licenseId}`, { method: 'DELETE', credentials: 'include' });
+        json = await res.json();
+      }
       if (json.success) {
         toast.success('license deleted');
         await fetchLicenses();
@@ -350,10 +399,17 @@ export default function LicensesPage() {
 
   const handleExport = async () => {
     try {
-      const res = await fetch(`/api/licenses/export?appId=${appId}`, { credentials: 'include' });
+      let res = await fetch(`/api/licenses/export?appId=${appId}`, { credentials: 'include' });
       if (!res.ok) {
-        toast.error('failed to export');
-        return;
+        const json = await res.json().catch(() => ({}));
+        if (isStepUpRequired(res, json)) {
+          if (!(await performStepUp())) return;
+          res = await fetch(`/api/licenses/export?appId=${appId}`, { credentials: 'include' });
+        }
+        if (!res.ok) {
+          toast.error('failed to export');
+          return;
+        }
       }
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -392,17 +448,41 @@ export default function LicensesPage() {
             <div>
               <h1 className="text-3xl font-bold">{app.name} - Licenses</h1>
               <p className="text-muted-foreground mt-2">create new licenses or export existing ones</p>
+              {user?.role === 'partner' && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  partner credits for this app: <span className="font-semibold text-foreground">{partnerCredits}</span>
+                </p>
+              )}
             </div>
           </div>
           <div className="flex gap-2">
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
-                <Button disabled={!['developer', 'admin', 'partner'].includes(user.role)}>+ Create Licenses</Button>
+                <Button
+                  disabled={
+                    !['developer', 'admin', 'partner'].includes(user.role) ||
+                    (user?.role === 'partner' && partnerCredits < 1)
+                  }
+                >
+                  + Create Licenses
+                </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>License Configuration</DialogTitle>
                 </DialogHeader>
+                {user?.role === 'partner' && (
+                  <div className="space-y-1 mb-2">
+                    <p className="text-xs text-muted-foreground">
+                      this action spends 1 credit per created license. available: {partnerCredits}
+                    </p>
+                    {partnerDefaults?.enabled && (
+                      <p className="text-xs text-muted-foreground">
+                        partner defaults are enabled for this app. mask and character set are fixed by the app owner.
+                      </p>
+                    )}
+                  </div>
+                )}
                 <form className="space-y-6" onSubmit={handleCreate}>
                   <Card>
                     <CardHeader>
@@ -430,7 +510,8 @@ export default function LicensesPage() {
                           value={mask}
                           onChange={(e) => setMask(e.target.value)}
                           placeholder="*****-****"
-                          required
+                        required
+                        disabled={user?.role === 'partner' && partnerDefaults?.enabled}
                         />
                         <p className="text-sm text-muted-foreground">use * for random characters, _ for separators</p>
                       </div>
@@ -442,6 +523,7 @@ export default function LicensesPage() {
                               id="lowercase"
                               checked={charset.lowercase}
                               onCheckedChange={(checked) => setCharset({ ...charset, lowercase: !!checked })}
+                              disabled={user?.role === 'partner' && partnerDefaults?.enabled}
                             />
                             <Label htmlFor="lowercase" className="font-normal">Lowercase (a-z)</Label>
                           </div>
@@ -450,6 +532,7 @@ export default function LicensesPage() {
                               id="uppercase"
                               checked={charset.uppercase}
                               onCheckedChange={(checked) => setCharset({ ...charset, uppercase: !!checked })}
+                              disabled={user?.role === 'partner' && partnerDefaults?.enabled}
                             />
                             <Label htmlFor="uppercase" className="font-normal">Uppercase (A-Z)</Label>
                           </div>
@@ -458,6 +541,7 @@ export default function LicensesPage() {
                               id="numbers"
                               checked={charset.numbers}
                               onCheckedChange={(checked) => setCharset({ ...charset, numbers: !!checked })}
+                              disabled={user?.role === 'partner' && partnerDefaults?.enabled}
                             />
                             <Label htmlFor="numbers" className="font-normal">Numbers (0-9)</Label>
                           </div>
@@ -466,6 +550,7 @@ export default function LicensesPage() {
                               id="symbols"
                               checked={charset.symbols}
                               onCheckedChange={(checked) => setCharset({ ...charset, symbols: !!checked })}
+                              disabled={user?.role === 'partner' && partnerDefaults?.enabled}
                             />
                             <Label htmlFor="symbols" className="font-normal">Symbols (!@#)</Label>
                           </div>
@@ -552,7 +637,10 @@ export default function LicensesPage() {
                     <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
                       Cancel
                     </Button>
-                    <Button type="submit" disabled={creating}>
+                    <Button
+                      type="submit"
+                      disabled={creating || (user?.role === 'partner' && count > partnerCredits)}
+                    >
                       {creating ? 'Creating...' : 'Create'}
                     </Button>
                   </div>
@@ -779,8 +867,14 @@ export default function LicensesPage() {
                           <div className="text-xs text-muted-foreground mt-1">Status</div>
                         </div>
                         <div>
-                          <div className="text-sm">{license.createdAt ? new Date(license.createdAt).toLocaleDateString() : '-'}</div>
-                          <div className="text-xs text-muted-foreground">Created</div>
+                          <div className="text-sm">
+                            {license.createdAt ? new Date(license.createdAt).toLocaleDateString() : '-'}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {license.createdByUsername
+                              ? `Created by ${license.createdByUsername}`
+                              : 'Created'}
+                          </div>
                         </div>
                         <div>
                           <div className="text-sm">{license.expiryDate ? new Date(license.expiryDate).toLocaleDateString() : 'Never'}</div>

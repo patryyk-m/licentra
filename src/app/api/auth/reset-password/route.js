@@ -1,12 +1,12 @@
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { connectDB } from '@/lib/db';
 import User from '@/models/User';
-import { hashPassword, verifyPassword } from '@/lib/crypto';
+import { hashPassword, verifyPassword } from '@/lib/auth';
 import { sendPasswordResetConfirmationEmail } from '@/lib/email';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getAuthRateLimit } from '@/config/ratelimits';
-import { handleApiError } from '@/lib/errors';
+import { getAuthRateLimit } from '@/lib/ratelimit';
+import { handleApiError } from '@/lib/security';
+import { parseJson, ok, fail } from '@/lib/http';
 
 const resetPasswordSchema = z.object({
   token: z.string().min(1),
@@ -19,7 +19,7 @@ export async function POST(req) {
 
   try {
     await connectDB();
-    const body = await req.json();
+    const body = await parseJson(req);
     const validated = resetPasswordSchema.parse(body);
 
     // find user with matching reset token
@@ -41,10 +41,7 @@ export async function POST(req) {
     }
 
     if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'invalid or expired reset token' },
-        { status: 400 }
-      );
+      return fail('invalid or expired reset token', 400);
     }
 
     // hash new password
@@ -63,16 +60,13 @@ export async function POST(req) {
       console.error('[reset_password] failed to send confirmation email:', error);
     });
 
-    return NextResponse.json({
+    return ok({
       success: true,
       message: 'password has been reset successfully',
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { success: false, message: error.errors[0].message },
-        { status: 400 }
-      );
+      return fail(error.errors[0].message, 400);
     }
     return handleApiError(error, 'reset_password');
   }

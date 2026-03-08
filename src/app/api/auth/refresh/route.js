@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
-import { getAuthCookies, setAuthCookies } from '@/lib/cookies';
-import { verifyRefreshToken, signAccessToken, signRefreshToken } from '@/lib/jwt';
+import { getAuthCookies, setAuthCookies } from '@/lib/auth-cookies';
+import { verifyRefreshToken, signAccessToken, signRefreshToken } from '@/lib/auth';
 import User from '@/models/User';
-import { normalizeRole } from '@/lib/roles';
+import { normalizeRole } from '@/lib/authz';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getAuthRateLimit } from '@/config/ratelimits';
+import { getAuthRateLimit } from '@/lib/ratelimit';
 
 export async function POST(req) {
   const rateLimitResponse = checkRateLimit(req, getAuthRateLimit('refresh'));
@@ -50,13 +50,8 @@ export async function POST(req) {
       );
     }
 
-    const rotatedUser = await User.findByIdAndUpdate(
-      user._id,
-      { $inc: { tokenVersion: 1 } },
-      { new: true }
-    );
-    const nextTokenVersion = rotatedUser?.tokenVersion ?? user.tokenVersion + 1;
-    const normalizedRole = normalizeRole(rotatedUser?.role || user.role);
+    const nextTokenVersion = user.tokenVersion ?? 0;
+    const normalizedRole = normalizeRole(user.role);
 
     // Generate new tokens
     const newAccessToken = signAccessToken({ id: user._id.toString(), role: normalizedRole });

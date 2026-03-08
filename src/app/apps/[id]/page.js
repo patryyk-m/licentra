@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import AppSecurityTab from './AppSecurityTab';
+import { performStepUp, isStepUpRequired } from '@/lib/step-up';
 
 export default function AppDetailPage() {
   const params = useParams();
@@ -35,6 +36,14 @@ export default function AppDetailPage() {
   const [createDeveloperInviteLoading, setCreateDeveloperInviteLoading] = useState(false);
   const [membersError, setMembersError] = useState('');
   const [clearingInviteId, setClearingInviteId] = useState(null);
+  const [partnerCreditDrafts, setPartnerCreditDrafts] = useState({});
+  const [grantingPartnerId, setGrantingPartnerId] = useState(null);
+  const [partnerDefaultsEnabled, setPartnerDefaultsEnabled] = useState(false);
+  const [partnerDefaultMask, setPartnerDefaultMask] = useState('*****-****');
+  const [partnerDefaultLowercase, setPartnerDefaultLowercase] = useState(true);
+  const [partnerDefaultUppercase, setPartnerDefaultUppercase] = useState(true);
+  const [partnerDefaultNumbers, setPartnerDefaultNumbers] = useState(true);
+  const [partnerDefaultSymbols, setPartnerDefaultSymbols] = useState(false);
 
   const isOwner = useMemo(() => Boolean(user && app && app.ownerId === user.id), [user, app]);
   const isAdmin = user?.role === 'admin';
@@ -49,6 +58,7 @@ export default function AppDetailPage() {
       : false;
     return isCollaborator;
   }, [user, app, isAdmin, isOwner]);
+  const canGrantPartnerCredits = hasFullAppAccess && user?.role !== 'partner';
 
   const canEditApp = hasFullAppAccess;
   const availableTabs = useMemo(() => {
@@ -59,32 +69,17 @@ export default function AppDetailPage() {
       tabs.push('code');
       tabs.push('security');
     }
-    if (canManagePartners) {
+    if (canManagePartners || canGrantPartnerCredits) {
       tabs.push('invites');
     }
     return tabs;
-  }, [hasFullAppAccess, canManagePartners]);
+  }, [hasFullAppAccess, canManagePartners, canGrantPartnerCredits]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || availableTabs.length === 0) return;
-    const url = new URL(window.location.href);
-    const requestedTab = url.searchParams.get('tab');
-    const preferredTab = hasFullAppAccess ? 'settings' : 'credentials';
-    const fallbackTab = availableTabs.includes(preferredTab)
-      ? preferredTab
-      : availableTabs[0];
-
-    if (requestedTab && availableTabs.includes(requestedTab)) {
-      if (tab !== requestedTab) {
-        setTab(requestedTab);
-      }
-      return;
-    }
-
-    if (tab !== fallbackTab) {
-      setTab(fallbackTab);
-      url.searchParams.set('tab', fallbackTab);
-      window.history.replaceState({}, '', `${url.pathname}?${url.searchParams.toString()}`);
+    if (availableTabs.length === 0) return;
+    const preferred = hasFullAppAccess ? 'settings' : availableTabs[0];
+    if (!availableTabs.includes(tab)) {
+      setTab(preferred);
     }
   }, [availableTabs, hasFullAppAccess, tab]);
 
@@ -121,6 +116,13 @@ export default function AppDetailPage() {
     setValidationsPerMinutePerLicense(found.validationsPerMinutePerLicense ?? 10);
     setAutoSuspendOnRateLimitAbuse(found.autoSuspendOnRateLimitAbuse ?? false);
     setHasSecret(Boolean(found.hasApiSecret));
+    const cfg = found.partnerLicenseConfig || {};
+    setPartnerDefaultsEnabled(Boolean(cfg.enabled));
+    setPartnerDefaultMask(cfg.mask || '*****-****');
+    setPartnerDefaultLowercase(cfg.lowercase ?? true);
+    setPartnerDefaultUppercase(cfg.uppercase ?? true);
+    setPartnerDefaultNumbers(cfg.numbers ?? true);
+    setPartnerDefaultSymbols(cfg.symbols ?? false);
   }, [appId, router]);
 
   useEffect(() => {
@@ -147,8 +149,16 @@ export default function AppDetailPage() {
       body: JSON.stringify({
         name,
         description,
-        validationsPerMinutePerLicense: Math.min(Math.max(Number(validationsPerMinutePerLicense) || 10, 1), 120),
+        validationsPerMinutePerLicense: Math.min(Math.max(Number(validationsPerMinutePerLicense) || 10, 1), 100),
         autoSuspendOnRateLimitAbuse,
+        partnerLicenseConfig: {
+          enabled: partnerDefaultsEnabled,
+          mask: partnerDefaultMask,
+          lowercase: partnerDefaultLowercase,
+          uppercase: partnerDefaultUppercase,
+          numbers: partnerDefaultNumbers,
+          symbols: partnerDefaultSymbols,
+        },
       }),
     });
     const json = await res.json();
@@ -161,8 +171,13 @@ export default function AppDetailPage() {
   };
 
   const generateOrRegenerate = async () => {
-    const res = await fetch(`/api/apps/reset-secret/${appId}`, { method: 'POST', credentials: 'include' });
-    const json = await res.json();
+    let res = await fetch(`/api/apps/reset-secret/${appId}`, { method: 'POST', credentials: 'include' });
+    let json = await res.json();
+    if (isStepUpRequired(res, json)) {
+      if (!(await performStepUp())) return;
+      res = await fetch(`/api/apps/reset-secret/${appId}`, { method: 'POST', credentials: 'include' });
+      json = await res.json();
+    }
     if (json.success) {
       setApiSecret(json.data.apiSecret);
       setShowSecret(true);
@@ -199,19 +214,14 @@ export default function AppDetailPage() {
   }, [appId]);
 
   useEffect(() => {
-    if (tab === 'invites' && canManagePartners) {
+    if (tab === 'invites' && (canManagePartners || canGrantPartnerCredits)) {
       loadMembers();
     }
-  }, [tab, appId, canManagePartners, loadMembers]);
+  }, [tab, appId, canManagePartners, canGrantPartnerCredits, loadMembers]);
 
   const handleTabChange = (value) => {
     if (!availableTabs.includes(value)) return;
     setTab(value);
-    if (typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      url.searchParams.set('tab', value);
-      router.replace(`${url.pathname}?${url.searchParams.toString()}`, { scroll: false });
-    }
   };
 
   const createInvite = async (targetRole = 'partner') => {
@@ -316,6 +326,38 @@ export default function AppDetailPage() {
       }
     } catch (error) {
       toast.error('network error while removing collaborator');
+    }
+  };
+
+  const grantPartnerCredits = async (partnerId) => {
+    if (!appId || !partnerId || !canGrantPartnerCredits) return;
+    const raw = partnerCreditDrafts[partnerId];
+    const credits = Number(raw);
+    if (!Number.isFinite(credits) || credits < 1) {
+      toast.error('enter at least 1 credit');
+      return;
+    }
+
+    setGrantingPartnerId(partnerId);
+    try {
+      const res = await fetch(`/api/apps/${appId}/partner-credits/grant`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partnerUserId: partnerId, credits: Math.floor(credits) }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success('credits granted');
+        setPartnerCreditDrafts((prev) => ({ ...prev, [partnerId]: '' }));
+        await loadMembers();
+      } else {
+        toast.error(json.message || 'failed to grant credits');
+      }
+    } catch (error) {
+      toast.error('network error while granting credits');
+    } finally {
+      setGrantingPartnerId(null);
     }
   };
 
@@ -441,12 +483,12 @@ export default function AppDetailPage() {
                         id="validationsPerMinutePerLicense"
                         type="number"
                         min={1}
-                        max={120}
+                        max={100}
                         value={validationsPerMinutePerLicense}
                         onChange={(e) => setValidationsPerMinutePerLicense(Number(e.target.value) || 10)}
                         disabled={!canEditApp}
                       />
-                      <p className="text-xs text-muted-foreground">limits how often each license can call the validate api (1–120). default 10.</p>
+                      <p className="text-xs text-muted-foreground">limits how often each license can call the validate api (1–100). default 10.</p>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Checkbox
@@ -460,8 +502,83 @@ export default function AppDetailPage() {
                       </Label>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      when enabled, licenses that hit rate limit thresholds (e.g. 50+ blocked requests or 10+ IPs in 10 min) are automatically suspended. you can reactivate them from manage licenses.
+                      when enabled, licenses with 50+ blocked validation requests in 10 min are automatically suspended. you can reactivate them from manage licenses.
                     </p>
+                    <div className="mt-6 border-t pt-4 space-y-3">
+                      <h2 className="text-sm font-semibold">partner license defaults</h2>
+                      <p className="text-xs text-muted-foreground">
+                        when enabled, partners creating licenses for this app will use this mask and character set. this keeps all partner generated keys consistent.
+                      </p>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="partnerDefaultsEnabled"
+                          checked={partnerDefaultsEnabled}
+                          onCheckedChange={(checked) => setPartnerDefaultsEnabled(!!checked)}
+                          disabled={!canEditApp}
+                        />
+                        <Label htmlFor="partnerDefaultsEnabled" className="font-normal cursor-pointer">
+                          enable partner defaults
+                        </Label>
+                      </div>
+                      {partnerDefaultsEnabled && (
+                        <div className="space-y-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="partnerMask">partner license mask</Label>
+                            <Input
+                              id="partnerMask"
+                              value={partnerDefaultMask}
+                              onChange={(e) => setPartnerDefaultMask(e.target.value)}
+                              disabled={!canEditApp}
+                            />
+                            <p className="text-xs text-muted-foreground">use * for random characters and _ for separators. example: *****-****</p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>partner character set</Label>
+                            <div className="space-y-1">
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id="partnerLowercase"
+                                  checked={partnerDefaultLowercase}
+                                  onCheckedChange={(checked) => setPartnerDefaultLowercase(!!checked)}
+                                  disabled={!canEditApp}
+                                />
+                                <Label htmlFor="partnerLowercase" className="font-normal">lowercase (a-z)</Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id="partnerUppercase"
+                                  checked={partnerDefaultUppercase}
+                                  onCheckedChange={(checked) => setPartnerDefaultUppercase(!!checked)}
+                                  disabled={!canEditApp}
+                                />
+                                <Label htmlFor="partnerUppercase" className="font-normal">uppercase (A-Z)</Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id="partnerNumbers"
+                                  checked={partnerDefaultNumbers}
+                                  onCheckedChange={(checked) => setPartnerDefaultNumbers(!!checked)}
+                                  disabled={!canEditApp}
+                                />
+                                <Label htmlFor="partnerNumbers" className="font-normal">numbers (0-9)</Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id="partnerSymbols"
+                                  checked={partnerDefaultSymbols}
+                                  onCheckedChange={(checked) => setPartnerDefaultSymbols(!!checked)}
+                                  disabled={!canEditApp}
+                                />
+                                <Label htmlFor="partnerSymbols" className="font-normal">symbols (!@#)</Label>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                at least one character type must be selected.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                     <Button type="submit" disabled={!canEditApp}>
                       Save
                     </Button>
@@ -518,7 +635,7 @@ export default function AppDetailPage() {
             </TabsContent>
           )}
 
-          {canManagePartners && (
+          {(canManagePartners || canGrantPartnerCredits) && (
             <TabsContent value="invites">
               <div className="space-y-4">
                 {membersError && (
@@ -659,15 +776,45 @@ export default function AppDetailPage() {
                               <p className="text-xs text-muted-foreground">
                                 added {formatDate(r.joinedAt)}
                               </p>
+                              <p className="text-xs text-muted-foreground">
+                                credits: {Number(r.credits || 0)}
+                              </p>
                             </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => removePartner(r.id)}
-                              disabled={membersLoading || !canManagePartners}
-                            >
-                              Remove
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              {canGrantPartnerCredits && (
+                                <>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={partnerCreditDrafts[r.id] ?? ''}
+                                    onChange={(e) =>
+                                      setPartnerCreditDrafts((prev) => ({
+                                        ...prev,
+                                        [r.id]: e.target.value,
+                                      }))
+                                    }
+                                    placeholder="credits"
+                                    className="w-24"
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => grantPartnerCredits(r.id)}
+                                    disabled={membersLoading || grantingPartnerId === r.id}
+                                  >
+                                    {grantingPartnerId === r.id ? 'granting...' : 'grant'}
+                                  </Button>
+                                </>
+                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => removePartner(r.id)}
+                                disabled={membersLoading || !canManagePartners}
+                              >
+                                Remove
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>

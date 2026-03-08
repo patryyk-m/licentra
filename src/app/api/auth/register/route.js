@@ -3,15 +3,14 @@ import { z } from 'zod';
 import { connectDB } from '@/lib/db';
 import User from '@/models/User';
 import AppInvite from '@/models/AppInvite';
-import { normalizeRole, ROLE } from '@/lib/roles';
-import { hashPassword } from '@/lib/crypto';
-import { signAccessToken, signRefreshToken } from '@/lib/jwt';
-import { setAuthCookies } from '@/lib/cookies';
+import { normalizeRole, ROLE } from '@/lib/authz';
+import { hashPassword, signAccessToken, signRefreshToken } from '@/lib/auth';
+import { setAuthCookies } from '@/lib/auth-cookies';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getAuthRateLimit } from '@/config/ratelimits';
+import { getAuthRateLimit } from '@/lib/ratelimit';
 import { sendWelcomeEmail } from '@/lib/email';
-import { logAuthEvent, SECURITY_EVENTS } from '@/lib/security-logger';
-import { handleApiError } from '@/lib/errors';
+import { logAuthEvent, SECURITY_EVENTS } from '@/lib/security';
+import { handleApiError } from '@/lib/security';
 
 const registerSchema = z.object({
   username: z.string().min(3).max(30).toLowerCase(),

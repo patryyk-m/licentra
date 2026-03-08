@@ -4,24 +4,21 @@ import { authenticateUser } from '@/middleware/auth';
 import License from '@/models/License';
 import App from '@/models/App';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getLicenseRateLimit } from '@/config/ratelimits';
+import { getLicenseRateLimit } from '@/lib/ratelimit';
 import { hasAppAccess } from '@/lib/authz';
-import { sanitizeObjectId } from '@/lib/sanitize';
-import { logAccessEvent, SECURITY_EVENTS } from '@/lib/security-logger';
-import { handleApiError } from '@/lib/errors';
+import { requireStepUp } from '@/lib/auth-cookies';
+import { sanitizeObjectId } from '@/lib/security';
+import { logAccessEvent, SECURITY_EVENTS } from '@/lib/security';
+import { handleApiError } from '@/lib/security';
+import { fail, wrapRoute } from '@/lib/http';
 
-export async function GET(req) {
+export const GET = wrapRoute(async function GET(req) {
   const rateLimited = checkRateLimit(req, getLicenseRateLimit('export'));
   if (rateLimited) return rateLimited;
-
-  try {
-    const user = await authenticateUser(req);
-    if (!user || !['developer', 'admin'].includes(user.role)) {
-      return NextResponse.json(
-        { success: false, message: 'Forbidden: insufficient permissions' },
-        { status: 403 }
-      );
-    }
+  const user = await authenticateUser(req);
+  if (!user || !['developer', 'admin'].includes(user.role)) {
+    return fail('Forbidden: insufficient permissions', 403);
+  }
 
     await connectDB();
     const { searchParams } = new URL(req.url);
@@ -29,18 +26,32 @@ export async function GET(req) {
     const appId = rawAppId ? sanitizeObjectId(rawAppId) : null;
 
     if (!appId) {
-      return NextResponse.json({ success: false, message: 'appId required' }, { status: 400 });
+      return fail('appId required', 400);
     }
 
     const app = await App.findById(appId);
-    if (!app || app.status === 'suspended') {
-      return NextResponse.json({ success: false, message: 'app not found' }, { status: 404 });
+    if (!app) {
+      return fail('app not found', 404);
+    }
+
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    if (
+      app.status === 'suspended' &&
+      (app.suspensionReason === 'plan_quota' || app.quotaSuspended) &&
+      app.quotaSuspendedMonth !== monthKey
+    ) {
+      app.status = 'active';
+      app.quotaSuspended = false;
+      app.quotaSuspendedMonth = null;
+      app.suspensionReason = 'none';
+      await app.save();
     }
 
     const hasAccess = hasAppAccess(app, user);
     if (!hasAccess) {
       logAccessEvent(SECURITY_EVENTS.ACCESS_DENIED, user.id, `app:${app._id}:export`, req, 'no_app_access').catch(() => {});
-      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+      return fail('Forbidden', 403);
     }
 
     const isAdmin = user.role === 'admin';
@@ -51,7 +62,12 @@ export async function GET(req) {
 
     if (!isAdmin && !isOwner && !isCollaborator) {
       logAccessEvent(SECURITY_EVENTS.ACCESS_DENIED, user.id, `app:${app._id}:export`, req, 'insufficient_permissions').catch(() => {});
-      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
+      return fail('Forbidden', 403);
+    }
+
+    const stepUpOk = await requireStepUp(req, user);
+    if (!stepUpOk) {
+      return fail('step-up required', 403);
     }
 
     const licenses = await License.find({ appId, status: 'active' }).sort({ createdAt: -1 }).lean();
@@ -70,15 +86,12 @@ export async function GET(req) {
 
     const csv = csvRows.join('\n');
 
-    return new NextResponse(csv, {
-      headers: {
-        'Content-Type': 'text/csv',
-        'Content-Disposition': `attachment; filename="licenses-${appId}-${Date.now()}.csv"`,
-      },
-    });
-  } catch (error) {
-    return handleApiError(error, 'licenses_export');
-  }
-}
+  return new NextResponse(csv, {
+    headers: {
+      'Content-Type': 'text/csv',
+      'Content-Disposition': `attachment; filename="licenses-${appId}-${Date.now()}.csv"`,
+    },
+  });
+}, (error) => handleApiError(error, 'licenses_export'));
 
 

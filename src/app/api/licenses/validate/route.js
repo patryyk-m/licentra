@@ -1,17 +1,17 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { connectDB } from '@/lib/db';
-import { checkRateLimit } from '@/lib/ratelimit';
-import { getLicenseRateLimit } from '@/config/ratelimits';
-import { checkLicenseRateLimit } from '@/lib/license-ratelimit';
-import { recordRateLimitEvent, checkAndCreateNotification } from '@/lib/rate-limit-notifications';
-import { getClientIp } from '@/lib/security-logger';
+import { checkRateLimit, getLicenseRateLimit, checkLicenseRateLimit, checkAppRateLimit } from '@/lib/ratelimit';
+import { getEffectiveMonthlyQuota, getValidationsPerMinutePerApp } from '@/lib/plan-limits';
+import { recordRateLimitEvent, checkAndCreateNotification } from '@/lib/email';
+import { getClientIp, getUserAgent, logSecurityEvent, SECURITY_EVENTS } from '@/lib/security';
 import App from '@/models/App';
 import License from '@/models/License';
 import ApiUsage from '@/models/ApiUsage';
-import { verifyPassword } from '@/lib/crypto';
-import { sanitizeObjectId, sanitizeHwid } from '@/lib/sanitize';
-import { handleApiError } from '@/lib/errors';
+import User from '@/models/User';
+import { verifyPassword } from '@/lib/auth';
+import { sanitizeObjectId, sanitizeHwid } from '@/lib/security';
+import { handleApiError } from '@/lib/security';
 
 const MAX_HWIDS = 5;
 
@@ -28,11 +28,27 @@ const resolveEffectiveLimit = (licenseDoc) => {
   return licenseDoc.hwidLocked ? configuredLimit : MAX_HWIDS;
 };
 
-const responseInvalid = (reason) =>
-  NextResponse.json({
+function responseInvalid(reason, req, meta = {}) {
+  logSecurityEvent(SECURITY_EVENTS.LICENSE_VALIDATION_FAILED, {
+    reason,
+    appId: meta.appId,
+    ip: getClientIp(req),
+    userAgent: getUserAgent(req),
+    ...meta,
+  }).catch(() => {});
+  return NextResponse.json({
     success: true,
     data: { valid: false, reason },
   });
+}
+
+const getMonthWindow = () => {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  return { monthStart, nextMonthStart, monthKey };
+};
 
 export async function POST(req) {
   const rateLimited = checkRateLimit(req, getLicenseRateLimit('validate'));
@@ -59,14 +75,67 @@ export async function POST(req) {
     const hasNormalizedHwid = Boolean(normalizedHwid);
 
     if (!appId || !apiSecret || !licenseKey) {
-      return responseInvalid('app_not_found');
+      return responseInvalid('app_not_found', req, { appId: rawAppId });
     }
 
     await connectDB();
 
-    const app = await App.findById(appId).select('+apiSecretHash status ownerId');
-    if (!app || app.status === 'suspended') {
-      return responseInvalid('app_not_found');
+    const app = await App.findById(appId).select(
+      '+apiSecretHash status ownerId validationsPerMinutePerLicense quotaSuspended quotaSuspendedMonth suspensionReason'
+    );
+    if (!app) {
+      return responseInvalid('app_not_found', req, { appId: appId?.toString() });
+    }
+
+    const { monthStart, nextMonthStart, monthKey } = getMonthWindow();
+
+    const owner = await User.findById(app.ownerId).select('plan monthlyQuotaOverride').lean();
+    const monthlyQuota = getEffectiveMonthlyQuota(owner?.plan, owner?.monthlyQuotaOverride);
+    const currentMonthUsageAgg = await ApiUsage.aggregate([
+      {
+        $match: {
+          userId: app.ownerId,
+          date: { $gte: monthStart, $lt: nextMonthStart },
+          $or: [{ licenseId: null }, { licenseId: { $exists: false } }],
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$count' },
+        },
+      },
+    ]);
+    const currentMonthUsage = currentMonthUsageAgg?.[0]?.total || 0;
+    const ownerOverQuota = currentMonthUsage >= monthlyQuota;
+
+    if (
+      app.status === 'suspended' &&
+      (app.suspensionReason === 'plan_quota' || app.quotaSuspended) &&
+      !ownerOverQuota
+    ) {
+      // quota suspension auto-resets once owner usage is below quota
+      app.status = 'active';
+      app.quotaSuspended = false;
+      app.quotaSuspendedMonth = null;
+      app.suspensionReason = 'none';
+      await app.save();
+    }
+
+    if (app.status !== 'active') {
+      await logSecurityEvent(SECURITY_EVENTS.APP_VALIDATION_BLOCKED_APP_SUSPENDED, {
+        appId: app._id.toString(),
+        appStatus: app.status,
+        ip: getClientIp(req),
+        userAgent: getUserAgent(req),
+      }).catch(() => {});
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'app suspended',
+        },
+        { status: 403 }
+      );
     }
 
     if (!app.apiSecretHash) {
@@ -84,28 +153,65 @@ export async function POST(req) {
       );
     }
 
+    const perAppLimit = getValidationsPerMinutePerApp(owner?.plan);
+    if (perAppLimit > 0) {
+      const appLimitResult = await checkAppRateLimit(app._id, perAppLimit);
+      if (appLimitResult.exceeded) {
+        return NextResponse.json(
+          { success: false, message: 'Too many validation requests for this app. Try again later.' },
+          { status: 429 }
+        );
+      }
+    }
+
+    // plan quota (monthly, owner-level)
+    if (currentMonthUsage >= monthlyQuota) {
+      app.status = 'suspended';
+      app.quotaSuspended = true;
+      app.quotaSuspendedMonth = monthKey;
+      app.suspensionReason = 'plan_quota';
+      await app.save();
+      await logSecurityEvent(SECURITY_EVENTS.APP_SUSPENDED_PLAN_QUOTA, {
+        appId: app._id.toString(),
+        appStatus: app.status,
+        monthlyQuota,
+        currentMonthUsage,
+        resource: `admin:${SECURITY_EVENTS.APP_SUSPENDED_PLAN_QUOTA}`,
+        ip: getClientIp(req),
+        userAgent: getUserAgent(req),
+      }).catch(() => {});
+      return NextResponse.json(
+        { success: false, message: 'plan quota exceeded for this month. app suspended until quota resets.' },
+        { status: 429 }
+      );
+    }
+
     const license = await License.findOne({
       appId: app._id,
       key: licenseKey,
     });
 
     if (!license) {
-      return responseInvalid('license_not_found');
+      return responseInvalid('license_not_found', req, { appId: app._id.toString() });
     }
 
     if (license.status !== 'active') {
-      return responseInvalid('license_not_active');
+      return responseInvalid('license_not_active', req, { appId: app._id.toString(), licenseId: license._id.toString() });
     }
 
     if (license.expiryDate && new Date(license.expiryDate) < new Date()) {
-      return responseInvalid('license_expired');
+      return responseInvalid('license_expired', req, { appId: app._id.toString(), licenseId: license._id.toString() });
     }
 
-    const licenseLimitResult = checkLicenseRateLimit(app, license);
+    const perLicenseLimit = Math.min(
+      Math.max(Number(app.validationsPerMinutePerLicense) || 10, 1),
+      100
+    );
+    const licenseLimitResult = await checkLicenseRateLimit(license._id, perLicenseLimit);
     if (licenseLimitResult.exceeded) {
       const clientIp = getClientIp(req);
-      recordRateLimitEvent(app._id, license._id, clientIp).catch(() => {});
-      checkAndCreateNotification(app._id, license._id).catch(() => {});
+      await recordRateLimitEvent(app._id, license._id, clientIp);
+      await checkAndCreateNotification(app._id, license._id);
       return NextResponse.json(
         { success: false, message: 'Too many validation requests for this license. Try again later.' },
         { status: 429 }
@@ -142,14 +248,14 @@ export async function POST(req) {
     if (refreshedLicense.hwidLocked) {
       if (updatedHwids.length > 0) {
         if (!hasNormalizedHwid) {
-          return responseInvalid('hwid_required');
+          return responseInvalid('hwid_required', req, { appId: app._id.toString(), licenseId: license._id.toString() });
         }
         if (!updatedHwids.includes(normalizedHwid)) {
-          return responseInvalid('hwid_mismatch');
+          return responseInvalid('hwid_mismatch', req, { appId: app._id.toString(), licenseId: license._id.toString() });
         }
       } else {
         if (!hasNormalizedHwid) {
-          return responseInvalid('hwid_required');
+          return responseInvalid('hwid_required', req, { appId: app._id.toString(), licenseId: license._id.toString() });
         }
       }
     }
@@ -196,7 +302,14 @@ export async function POST(req) {
         });
       }
     }
-    
+
+    logSecurityEvent(SECURITY_EVENTS.LICENSE_VALIDATION, {
+      appId: app._id.toString(),
+      licenseId: refreshedLicense._id.toString(),
+      ip: getClientIp(req),
+      userAgent: getUserAgent(req),
+    }).catch(() => {});
+
     return NextResponse.json({
       success: true,
       data: {

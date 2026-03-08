@@ -1,21 +1,62 @@
 import { NextResponse } from 'next/server';
 import { authenticateUser } from '@/middleware/auth';
-import { normalizeRole } from '@/lib/roles';
+import { normalizeRole } from '@/lib/authz';
 import { connectDB } from '@/lib/db';
 import User from '@/models/User';
 import App from '@/models/App';
 import License from '@/models/License';
 import AppInvite from '@/models/AppInvite';
-import { clearAuthCookies } from '@/lib/cookies';
+import { clearAuthCookies, getAuthCookies, setAuthCookies } from '@/lib/auth-cookies';
+import { verifyRefreshToken, signAccessToken, signRefreshToken } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getAuthRateLimit } from '@/config/ratelimits';
+import { getAuthRateLimit } from '@/lib/ratelimit';
 
 export async function GET(req) {
   const rateLimitResponse = checkRateLimit(req, getAuthRateLimit('me'));
   if (rateLimitResponse) return rateLimitResponse;
 
   try {
-    const user = await authenticateUser(req);
+    let user = await authenticateUser(req);
+
+    // smooth session renewal for expired access tokens
+    let refreshedTokens = null;
+    if (!user) {
+      const { refreshToken } = getAuthCookies(req);
+      if (refreshToken) {
+        try {
+          const decoded = verifyRefreshToken(refreshToken);
+          const refreshUser = await User.findById(decoded.id).lean();
+          if (
+            refreshUser &&
+            refreshUser.status !== 'suspended' &&
+            decoded.tokenVersion === (refreshUser.tokenVersion ?? 0)
+          ) {
+            const role = normalizeRole(refreshUser.role);
+            const nextTokenVersion = refreshUser.tokenVersion ?? 0;
+            const accessToken = signAccessToken({ id: refreshUser._id.toString(), role });
+            const newRefreshToken = signRefreshToken({
+              id: refreshUser._id.toString(),
+              tokenVersion: nextTokenVersion,
+            });
+
+            refreshedTokens = { accessToken, refreshToken: newRefreshToken };
+            user = {
+              id: refreshUser._id.toString(),
+              username: refreshUser.username || '',
+              email: refreshUser.email || '',
+              role,
+              plan: refreshUser.plan || 'free',
+              partnerApps: Array.isArray(refreshUser.partnerApps)
+                ? refreshUser.partnerApps.map((appId) => appId?.toString())
+                : [],
+              developerApps: Array.isArray(refreshUser.developerApps)
+                ? refreshUser.developerApps.map((appId) => appId?.toString())
+                : [],
+            };
+          }
+        } catch {}
+      }
+    }
 
     if (!user) {
       return NextResponse.json(
@@ -39,7 +80,7 @@ export async function GET(req) {
 
     const subscription = userDoc.subscription || {};
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         user: {
@@ -47,7 +88,8 @@ export async function GET(req) {
           username: user.username,
           email: user.email,
           role: normalizeRole(user.role),
-          plan: user.plan || 'free',
+          plan: userDoc.plan || user.plan || 'free',
+          monthlyQuotaOverride: userDoc.monthlyQuotaOverride ?? null,
           partnerApps: Array.isArray(user.partnerApps)
             ? user.partnerApps.map((appId) => appId?.toString())
             : [],
@@ -62,8 +104,14 @@ export async function GET(req) {
         },
       },
     });
+
+    if (refreshedTokens) {
+      setAuthCookies(response, refreshedTokens.accessToken, refreshedTokens.refreshToken);
+    }
+
+    return response;
   } catch (error) {
-    const { handleApiError } = await import('@/lib/errors');
+    const { handleApiError } = await import('@/lib/security');
     return handleApiError(error, 'get_me');
   }
 }
@@ -110,7 +158,7 @@ export async function DELETE(req) {
       );
     }
 
-    const { verifyPassword } = await import('@/lib/crypto');
+    const { verifyPassword } = await import('@/lib/auth');
     const isValidPassword = await verifyPassword(password, userDoc.passwordHash);
     if (!isValidPassword) {
       return NextResponse.json(
@@ -121,7 +169,7 @@ export async function DELETE(req) {
 
     // log deletion request
     const SecurityLog = (await import('@/models/SecurityLog')).default;
-    const { getClientIp, getUserAgent } = await import('@/lib/security-logger');
+    const { getClientIp, getUserAgent } = await import('@/lib/security');
     await SecurityLog.create({
       userId: user.id,
       event: 'account_deletion_requested',
@@ -166,7 +214,7 @@ export async function DELETE(req) {
 
     return response;
   } catch (error) {
-    const { handleApiError } = await import('@/lib/errors');
+    const { handleApiError } = await import('@/lib/security');
     return handleApiError(error, 'delete_account');
   }
 }
