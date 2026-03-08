@@ -1,12 +1,13 @@
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import Stripe from 'stripe';
 import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import User from '@/models/User';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getStripeRateLimit } from '@/config/ratelimits';
-import { handleApiError } from '@/lib/errors';
+import { getStripeRateLimit } from '@/lib/ratelimit';
+import { handleApiError } from '@/lib/security';
+import { getSafeAppBaseUrl } from '@/lib/security';
+import { ok, fail } from '@/lib/http';
 
 const checkoutSchema = z.object({
   plan: z.enum(['pro', 'business']),
@@ -20,15 +21,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 
 // base url for stripe redirects
 function getStripeBaseUrl() {
-
-  const url = process.env.NEXT_PUBLIC_APP_URL;
-  
-  if (url) {
-    return url.replace(/\/$/, '');
-  }
-  
-  // fallback to production if not set
-  return 'https://licentra.dev';
+  return getSafeAppBaseUrl();
 }
 
 export async function POST(req) {
@@ -38,10 +31,7 @@ export async function POST(req) {
   try {
     const user = await authenticateUser(req);
     if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
+      return fail('Unauthorized', 401);
     }
 
     await connectDB();
@@ -61,19 +51,13 @@ export async function POST(req) {
     }
 
     if (!priceId) {
-      return NextResponse.json(
-        { success: false, message: 'price configuration error' },
-        { status: 500 }
-      );
+      return fail('price configuration error', 500);
     }
 
     // get user document
     const userDoc = await User.findById(user.id);
     if (!userDoc) {
-      return NextResponse.json(
-        { success: false, message: 'user not found' },
-        { status: 404 }
-      );
+      return fail('user not found', 404);
     }
 
     // get or create stripe customer
@@ -160,7 +144,7 @@ export async function POST(req) {
     // create checkout session
     const session = await stripe.checkout.sessions.create(sessionParams);
 
-    return NextResponse.json({
+    return ok({
       success: true,
       data: {
         url: session.url,
@@ -168,10 +152,7 @@ export async function POST(req) {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { success: false, message: error.errors[0].message },
-        { status: 400 }
-      );
+      return fail(error.errors[0].message, 400);
     }
     return handleApiError(error, 'stripe_checkout');
   }

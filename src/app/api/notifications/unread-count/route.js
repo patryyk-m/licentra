@@ -3,7 +3,7 @@ import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
 import Notification from '@/models/Notification';
-import { handleApiError } from '@/lib/errors';
+import { handleApiError } from '@/lib/security';
 
 export async function GET(req) {
   const rateLimited = checkRateLimit(req, { limit: 60, windowMinutes: 1 });

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { connectDB } from '@/lib/db';
 import User from '@/models/User';
-import { handleApiError } from '@/lib/errors';
+import { handleApiError } from '@/lib/security';
 
 // initialize stripe
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {

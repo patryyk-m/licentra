@@ -1,7 +1,8 @@
-import { verifyAccessToken } from '../lib/jwt.js';
-import { getAuthCookies } from '../lib/cookies.js';
+import { verifyAccessToken } from '../lib/auth.js';
+import { getAuthCookies } from '../lib/auth-cookies.js';
 import User from '../models/User.js';
 import { normalizeAuthUser } from '../lib/authz.js';
+import { logSecurityEvent, SECURITY_EVENTS } from '../lib/security.js';
 
 // Middleware to authenticate user from access token
 export async function authenticateUser(req) {
@@ -16,6 +17,13 @@ export async function authenticateUser(req) {
     const user = await User.findById(decoded.id).select('-passwordHash').lean();
     
     if (!user) {
+      return null;
+    }
+
+    if (user.status === 'suspended') {
+      await logSecurityEvent(SECURITY_EVENTS.USER_BLOCKED_SUSPENDED, {
+        userId: user._id?.toString(),
+      }).catch(() => {});
       return null;
     }
 

@@ -1,15 +1,15 @@
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getAuthRateLimit } from '@/config/ratelimits';
-import { verifyPassword, hashPassword } from '@/lib/crypto';
+import { getAuthRateLimit } from '@/lib/ratelimit';
+import { verifyPassword, hashPassword } from '@/lib/auth';
 import User from '@/models/User';
 import SecurityLog from '@/models/SecurityLog';
-import { logAuthEvent, SECURITY_EVENTS, getClientIp, getUserAgent } from '@/lib/security-logger';
-import { handleApiError } from '@/lib/errors';
+import { logAuthEvent, SECURITY_EVENTS, getClientIp, getUserAgent } from '@/lib/security';
+import { handleApiError } from '@/lib/security';
 import { sendPasswordResetConfirmationEmail } from '@/lib/email';
+import { parseJson, ok, fail } from '@/lib/http';
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'current password is required'),
@@ -23,33 +23,24 @@ export async function POST(req) {
   try {
     const user = await authenticateUser(req);
     if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
+      return fail('Unauthorized', 401);
     }
 
     await connectDB();
-    const body = await req.json();
+    const body = await parseJson(req);
     const { currentPassword, newPassword } = changePasswordSchema.parse(body);
 
     // get full user with password hash
     const userDoc = await User.findById(user.id).select('+passwordHash');
     if (!userDoc) {
-      return NextResponse.json(
-        { success: false, message: 'user not found' },
-        { status: 404 }
-      );
+      return fail('user not found', 404);
     }
 
     // verify current password
     const isValidPassword = await verifyPassword(currentPassword, userDoc.passwordHash);
     if (!isValidPassword) {
       logAuthEvent(SECURITY_EVENTS.LOGIN_FAILURE, user.id, req, { reason: 'invalid_current_password', action: 'change_password' }).catch(() => {});
-      return NextResponse.json(
-        { success: false, message: 'current password is incorrect' },
-        { status: 401 }
-      );
+      return fail('current password is incorrect', 401);
     }
 
     // hash new password
@@ -70,23 +61,20 @@ export async function POST(req) {
       details: { timestamp: new Date().toISOString() },
     });
 
-    logAuthEvent(SECURITY_EVENTS.PASSWORD_RESET_REQUEST, user.id, req, { action: 'password_changed' }).catch(() => {});
+    logAuthEvent(SECURITY_EVENTS.PASSWORD_CHANGED, user.id, req).catch(() => {});
 
     // send confirmation email
     sendPasswordResetConfirmationEmail(userDoc.email).catch((error) => {
       console.error('[change_password] failed to send confirmation email:', error);
     });
 
-    return NextResponse.json({
+    return ok({
       success: true,
       message: 'password changed successfully. all sessions have been invalidated.',
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { success: false, message: error.errors[0].message },
-        { status: 400 }
-      );
+      return fail(error.errors[0].message, 400);
     }
     return handleApiError(error, 'change_password');
   }

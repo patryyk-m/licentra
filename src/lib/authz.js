@@ -1,5 +1,28 @@
-import { normalizeRole, ROLE } from './roles';
-import { isPrivateIp } from './ssrf-protection';
+export const ROLE = {
+  DEVELOPER: 'developer',
+  PARTNER: 'partner',
+  ADMIN: 'admin',
+};
+
+const VALID_ROLES = new Set(Object.values(ROLE));
+
+export function normalizeRole(role) {
+  if (typeof role !== 'string') return ROLE.DEVELOPER;
+  const normalized = role.trim().toLowerCase();
+  return VALID_ROLES.has(normalized) ? normalized : ROLE.DEVELOPER;
+}
+
+export function isDeveloperRole(role) {
+  return normalizeRole(role) === ROLE.DEVELOPER;
+}
+
+export function isPartnerRole(role) {
+  return normalizeRole(role) === ROLE.PARTNER;
+}
+
+export function isAdminRole(role) {
+  return normalizeRole(role) === ROLE.ADMIN;
+}
 
 const toStringId = (value) => {
   if (!value) return null;
@@ -40,7 +63,6 @@ export function hasAppAccess(app, user) {
   const ownerId = toStringId(app.ownerId);
 
   if (!appId) return false;
-  if (user.role === ROLE.ADMIN) return true;
   if (ownerId && ownerId === user.id) return true;
   if (user.developerApps?.includes(appId)) return true;
   if (user.partnerApps?.includes(appId)) return true;
@@ -55,5 +77,14 @@ export function assertRole(user, allowedRoles = []) {
     error.status = 403;
     throw error;
   }
+}
+
+export function isAdmin(user) {
+  if (!user) return false;
+  return isAdminRole(user.role);
+}
+
+export function assertAdmin(user) {
+  assertRole(user, [ROLE.ADMIN]);
 }
 

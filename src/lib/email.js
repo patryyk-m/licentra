@@ -1,4 +1,10 @@
 import { Resend } from 'resend';
+import { getSafeAppBaseUrl } from '@/lib/security';
+import RateLimitEvent from '../models/RateLimitEvent';
+import RateLimitAggregate from '../models/RateLimitAggregate';
+import Notification from '../models/Notification';
+import App from '../models/App';
+import License from '../models/License';
 
 // initialize resend client
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -7,7 +13,15 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.MAIL_FROM || 'no-reply@system.licentra.dev';
 
 // base url for links
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
+const APP_URL = getSafeAppBaseUrl();
+const WINDOW_MS = 10 * 60 * 1000;
+
+const MASK_IP = (ip) => {
+  if (!ip || ip === 'unknown') return '***';
+  const parts = ip.split('.');
+  if (parts.length === 4) return `${parts[0]}.***.***.${parts[3]}`;
+  return ip.slice(0, 4) + '***';
+};
 
 /**
  * send email using resend
@@ -208,5 +222,107 @@ export async function sendPasswordResetConfirmationEmail(email) {
     subject: 'Password Reset Successful',
     html,
   });
+}
+
+export async function recordRateLimitEvent(appId, licenseId, ip) {
+  try {
+    await RateLimitEvent.create({ appId, licenseId, ip });
+  } catch (e) {
+    console.error('recordRateLimitEvent failed:', e);
+  }
+}
+
+export async function checkAndCreateNotification(appId, licenseId) {
+  try {
+    const windowStart = new Date(Date.now() - WINDOW_MS);
+    const events = await RateLimitEvent.find({
+      appId,
+      licenseId,
+      createdAt: { $gte: windowStart },
+    })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const rateLimitedCount = events.length;
+    if (rateLimitedCount === 0) return;
+
+    const ips = events.map((e) => e.ip);
+    const uniqueIpCount = new Set(ips).size;
+
+    const ipCounts = {};
+    ips.forEach((ip) => {
+      ipCounts[ip] = (ipCounts[ip] || 0) + 1;
+    });
+    const topIps = Object.entries(ipCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([ip, count]) => ({ ip: MASK_IP(ip), count }));
+
+    const firstSeenAt = events[0].createdAt;
+    const lastSeenAt = events[events.length - 1].createdAt;
+    const shouldSuspend = rateLimitedCount >= 50;
+
+    const app = await App.findById(appId).select('ownerId name autoSuspendOnRateLimitAbuse').lean();
+    if (!app?.ownerId) return;
+
+    if (shouldSuspend && app.autoSuspendOnRateLimitAbuse) {
+      await License.updateOne({ _id: licenseId, status: 'active' }, { $set: { status: 'suspended' } });
+    }
+
+    const license = await License.findById(licenseId).select('key').lean();
+    const licenseKey = license?.key ? `${license.key.slice(0, 8)}...` : 'unknown';
+
+    let severity = 'warning';
+    if (rateLimitedCount >= 50) severity = 'critical';
+
+    const title = `Rate limit abuse: ${app.name} / ${licenseKey}`;
+    const message = `${rateLimitedCount} blocked (429) requests from ${uniqueIpCount} IP${uniqueIpCount > 1 ? 's' : ''} in last 10 min${shouldSuspend ? ' — license auto-suspended' : ''}`;
+
+    const existing = await Notification.findOne({
+      appId,
+      licenseId,
+      type: 'rate_limit',
+      isRead: false,
+    })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    const metadata = {
+      rateLimitedCount,
+      uniqueIpCount,
+      topIps,
+      firstSeenAt,
+      lastSeenAt,
+      timeWindow: 'last 10 minutes',
+      actions: { viewLicense: true, lockLicense: true, reduceLimit: true },
+    };
+
+    if (existing) {
+      await Notification.findByIdAndUpdate(existing._id, {
+        $set: { message, severity, metadata },
+      });
+    } else {
+      await Notification.create({
+        userId: app.ownerId,
+        type: 'rate_limit',
+        title,
+        message,
+        severity,
+        appId,
+        licenseId,
+        metadata,
+      });
+    }
+
+    if (shouldSuspend) {
+      await RateLimitAggregate.findOneAndUpdate(
+        { appId, licenseId },
+        { $set: { lastNotifiedAt: new Date() } },
+        { upsert: true }
+      );
+    }
+  } catch (e) {
+    console.error('checkAndCreateNotification failed:', e);
+  }
 }
 

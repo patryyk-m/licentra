@@ -122,7 +122,7 @@ export default function RegisterPage() {
                 spellCheck={false}
               />
               <p className="text-xs text-muted-foreground">
-                Only partner codes are accepted here. Collaborator invites must be claimed after signup.
+                only partner codes are accepted here. if a valid partner code is used, this account will be created as a partner account for that app. collaborator invites must be claimed after signup.
               </p>
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>

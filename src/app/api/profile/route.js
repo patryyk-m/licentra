@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { connectDB } from '@/lib/db';
 import { authenticateUser } from '@/middleware/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getAuthRateLimit } from '@/config/ratelimits';
+import { getAuthRateLimit } from '@/lib/ratelimit';
 import User from '@/models/User';
-import { normalizeRole } from '@/lib/roles';
-import { handleApiError } from '@/lib/errors';
+import { normalizeRole } from '@/lib/authz';
+import { handleApiError } from '@/lib/security';
 
 const updateProfileSchema = z.object({
   username: z.string().min(3).max(30).toLowerCase().trim().optional(),

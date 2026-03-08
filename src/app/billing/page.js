@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { CheckCircle, XCircle, CreditCard, Calendar, AlertCircle, Loader2, Package, ArrowUpDown, Settings2, ArrowUpRight } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { performStepUp, isStepUpRequired } from '@/lib/step-up';
 
 function BillingContent() {
   const router = useRouter();
@@ -89,14 +90,26 @@ function BillingContent() {
 
     setProcessingAction('changePlan');
     try {
-      const response = await fetch('/api/stripe/change-plan', {
+      let response = await fetch('/api/stripe/change-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ targetPlan }),
       });
-
-      const result = await response.json();
+      let result = await response.json();
+      if (isStepUpRequired(response, result)) {
+        if (!(await performStepUp())) {
+          setProcessingAction(null);
+          return;
+        }
+        response = await fetch('/api/stripe/change-plan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ targetPlan }),
+        });
+        result = await response.json();
+      }
 
       if (result.success) {
         if (result.data?.isUpgrade) {
@@ -146,12 +159,22 @@ function BillingContent() {
 
     setProcessingAction('cancel');
     try {
-      const response = await fetch('/api/stripe/cancel-subscription', {
+      let response = await fetch('/api/stripe/cancel-subscription', {
         method: 'POST',
         credentials: 'include',
       });
-
-      const result = await response.json();
+      let result = await response.json();
+      if (isStepUpRequired(response, result)) {
+        if (!(await performStepUp())) {
+          setProcessingAction(null);
+          return;
+        }
+        response = await fetch('/api/stripe/cancel-subscription', {
+          method: 'POST',
+          credentials: 'include',
+        });
+        result = await response.json();
+      }
 
       if (result.success) {
         toast.success(`subscription will be canceled on ${cancelDate}. you will keep access until then.`);
@@ -180,14 +203,26 @@ function BillingContent() {
 
     setProcessingAction('changeBillingCycle');
     try {
-      const response = await fetch('/api/stripe/change-billing-cycle', {
+      let response = await fetch('/api/stripe/change-billing-cycle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ billingCycle: targetCycle }),
       });
-
-      const result = await response.json();
+      let result = await response.json();
+      if (isStepUpRequired(response, result)) {
+        if (!(await performStepUp())) {
+          setProcessingAction(null);
+          return;
+        }
+        response = await fetch('/api/stripe/change-billing-cycle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ billingCycle: targetCycle }),
+        });
+        result = await response.json();
+      }
 
       if (result.success) {
         toast.success(`billing cycle will switch to ${targetCycle} at the end of your current period`);

@@ -2,14 +2,13 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { connectDB } from '@/lib/db';
 import User from '@/models/User';
-import { verifyPassword } from '@/lib/crypto';
-import { signAccessToken, signRefreshToken } from '@/lib/jwt';
-import { normalizeRole } from '@/lib/roles';
-import { setAuthCookies } from '@/lib/cookies';
+import { verifyPassword, signAccessToken, signRefreshToken } from '@/lib/auth';
+import { normalizeRole } from '@/lib/authz';
+import { setAuthCookies } from '@/lib/auth-cookies';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getAuthRateLimit } from '@/config/ratelimits';
-import { logAuthEvent, SECURITY_EVENTS } from '@/lib/security-logger';
-import { handleApiError } from '@/lib/errors';
+import { getAuthRateLimit } from '@/lib/ratelimit';
+import { logAuthEvent, SECURITY_EVENTS } from '@/lib/security';
+import { handleApiError } from '@/lib/security';
 
 const loginSchema = z.object({
   emailOrUsername: z.string(),

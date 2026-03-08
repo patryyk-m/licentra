@@ -29,6 +29,17 @@ const UserSchema = new Schema({
     enum: ['free', 'pro', 'business'],
     default: 'free',
   },
+  monthlyQuotaOverride: {
+    type: Number,
+    default: null,
+    min: 0,
+  },
+  status: {
+    type: String,
+    enum: ['active', 'suspended'],
+    default: 'active',
+    index: true,
+  },
   role: {
     type: String,
     enum: ['developer', 'partner', 'admin'],

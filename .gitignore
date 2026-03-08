@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# security event log (dev/testing)
+security-events.log
+
 # debug
 npm-debug.log*
 yarn-debug.log*

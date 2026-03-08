@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { User, Settings, LogOut, CreditCard } from 'lucide-react';
+import { User, Settings, LogOut, CreditCard, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Navbar() {
@@ -18,6 +18,10 @@ export default function Navbar() {
   const fetchUser = useCallback(async () => {
     try {
       const response = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
+      if (response.status === 401) {
+        setUser(null);
+        return;
+      }
       const result = await response.json();
 
       if (result.success && result.data?.user) {
@@ -26,7 +30,6 @@ export default function Navbar() {
         setUser(null);
       }
     } catch (error) {
-      console.error('Error fetching user:', error);
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -167,6 +170,16 @@ export default function Navbar() {
                         <Settings className="w-4 h-4" />
                         Settings
                       </Link>
+                      {user.role === 'admin' && (
+                        <Link
+                          href="/admin"
+                          className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted text-sm"
+                          onClick={() => setUserMenuOpen(false)}
+                        >
+                          <Shield className="w-4 h-4" />
+                          Admin
+                        </Link>
+                      )}
                       <button
                         onClick={handleLogout}
                         className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted text-sm w-full text-left text-red-500"

@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { clearAuthCookies } from '@/lib/cookies';
+import { clearAuthCookies } from '@/lib/auth-cookies';
 import { authenticateUser } from '@/middleware/auth';
 import User from '@/models/User';
 import { connectDB } from '@/lib/db';
 import { checkRateLimit } from '@/lib/ratelimit';
-import { getAuthRateLimit } from '@/config/ratelimits';
+import { getAuthRateLimit } from '@/lib/ratelimit';
+import { logAuthEvent, SECURITY_EVENTS } from '@/lib/security';
 
 export async function POST(req) {
   const rateLimitResponse = checkRateLimit(req, getAuthRateLimit('logout'));
@@ -18,6 +19,7 @@ export async function POST(req) {
         { _id: user.id },
         { $inc: { tokenVersion: 1 } }
       ).catch(() => {});
+      logAuthEvent(SECURITY_EVENTS.LOGOUT, user.id, req).catch(() => {});
     }
 
     const response = NextResponse.json({
