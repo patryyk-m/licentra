@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 async function ensureStepUp() {
@@ -82,39 +83,39 @@ export function AdminNotesPanel({ targetType, targetId }) {
   };
 
   return (
-    <div className="rounded-lg border p-4 space-y-3">
-      <div className="text-sm font-medium">admin notes</div>
-      <div className="space-y-2">
-        {notes.length === 0 ? (
-          <div className="text-xs text-muted-foreground">no notes yet</div>
-        ) : (
-          notes.map((n) => (
-            <div key={n.id} className="text-xs border rounded p-2 bg-background">
-              <div>{n.note}</div>
-              <div className="text-muted-foreground mt-1">
-                {n.createdAt ? new Date(n.createdAt).toLocaleString() : '-'}
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">admin notes</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-2">
+          {notes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">no notes yet</p>
+          ) : (
+            notes.map((n) => (
+              <div key={n.id} className="rounded-lg border p-3 text-sm">
+                <p>{n.note}</p>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  {n.createdAt ? new Date(n.createdAt).toLocaleString() : '-'}
+                </p>
               </div>
-            </div>
-          ))
-        )}
-      </div>
-      <div className="flex gap-2">
-        <input
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="add note..."
-          className="border rounded px-2 py-1 text-sm flex-1 bg-background"
-        />
-        <button
-          onClick={addNote}
-          disabled={busy}
-          className="px-3 py-1 rounded border text-sm bg-background hover:bg-muted"
-        >
-          add
-        </button>
-      </div>
-      {message ? <div className="text-xs text-muted-foreground">{message}</div> : null}
-    </div>
+            ))
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="add note..."
+            className="flex-1"
+          />
+          <Button variant="outline" size="sm" onClick={addNote} disabled={busy}>
+            add
+          </Button>
+        </div>
+        {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -181,43 +182,31 @@ export function AdminAppActions({ appId, status }) {
     });
 
   return (
-    <div className="rounded-lg border p-4 space-y-2">
-      <div className="text-sm font-medium">actions</div>
-      <div className="flex gap-2 flex-wrap">
-        {status === 'suspended' ? (
-          <button
-            onClick={restoreApp}
-            disabled={busy}
-            className="px-3 py-1 text-sm rounded border bg-background hover:bg-muted"
-          >
-            restore app
-          </button>
-        ) : (
-          <button
-            onClick={suspendApp}
-            disabled={busy}
-            className="px-3 py-1 text-sm rounded border bg-background hover:bg-muted"
-          >
-            suspend app
-          </button>
-        )}
-        <button
-          onClick={suspendAllLicenses}
-          disabled={busy}
-          className="px-3 py-1 text-sm rounded border bg-background hover:bg-muted"
-        >
-          suspend all licenses
-        </button>
-        <button
-          onClick={rotateSecret}
-          disabled={busy}
-          className="px-3 py-1 text-sm rounded border bg-background hover:bg-muted"
-        >
-          rotate app secret
-        </button>
-      </div>
-      {message ? <div className="text-xs text-muted-foreground">{message}</div> : null}
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">actions</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex gap-2 flex-wrap">
+          {status === 'suspended' ? (
+            <Button variant="outline" size="sm" onClick={restoreApp} disabled={busy}>
+              restore app
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={suspendApp} disabled={busy}>
+              suspend app
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={suspendAllLicenses} disabled={busy}>
+            suspend all licenses
+          </Button>
+          <Button variant="outline" size="sm" onClick={rotateSecret} disabled={busy}>
+            rotate app secret
+          </Button>
+        </div>
+        {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -255,29 +244,25 @@ export function AdminUserActions({ userId, status, isSelf }) {
   };
 
   return (
-    <div className="rounded-lg border p-4 space-y-2">
-      <div className="text-sm font-medium">actions</div>
-      <div className="flex gap-2 flex-wrap">
-        {status === 'suspended' ? (
-          <button
-            onClick={() => run(`/api/admin/users/${userId}/unsuspend`)}
-            disabled={busy}
-            className="px-3 py-1 text-sm rounded border bg-background hover:bg-muted"
-          >
-            unsuspend user
-          </button>
-        ) : (
-          <button
-            onClick={() => run(`/api/admin/users/${userId}/suspend`)}
-            disabled={busy}
-            className="px-3 py-1 text-sm rounded border bg-background hover:bg-muted"
-          >
-            suspend user
-          </button>
-        )}
-      </div>
-      {message ? <div className="text-xs text-muted-foreground">{message}</div> : null}
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">actions</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex gap-2 flex-wrap">
+          {status === 'suspended' ? (
+            <Button variant="outline" size="sm" onClick={() => run(`/api/admin/users/${userId}/unsuspend`)} disabled={busy}>
+              unsuspend user
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => run(`/api/admin/users/${userId}/suspend`)} disabled={busy}>
+              suspend user
+            </Button>
+          )}
+        </div>
+        {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -337,31 +322,19 @@ export function AdminLicenseActions({ licenseId, status }) {
     <div className="space-y-1">
       <div className="flex gap-2 flex-wrap">
         {status === 'suspended' ? (
-          <button
-            onClick={reactivate}
-            disabled={busy}
-            className="px-2 py-1 rounded border text-xs bg-background hover:bg-muted"
-          >
+          <Button variant="outline" size="sm" onClick={reactivate} disabled={busy}>
             reactivate
-          </button>
+          </Button>
         ) : (
-          <button
-            onClick={suspend}
-            disabled={busy}
-            className="px-2 py-1 rounded border text-xs bg-background hover:bg-muted"
-          >
+          <Button variant="outline" size="sm" onClick={suspend} disabled={busy}>
             suspend
-          </button>
+          </Button>
         )}
-        <button
-          onClick={remove}
-          disabled={busy}
-          className="px-2 py-1 rounded border text-xs bg-background hover:bg-muted"
-        >
+        <Button variant="outline" size="sm" onClick={remove} disabled={busy}>
           delete
-        </button>
+        </Button>
       </div>
-      {message ? <div className="text-[11px] text-muted-foreground">{message}</div> : null}
+      {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
     </div>
   );
 }
@@ -434,16 +407,19 @@ export function AdminUserPlanQuota({
     });
 
   return (
-    <div className="rounded-lg border p-4 space-y-4">
-      <div className="text-sm font-medium">plan and quota</div>
-      <p className="text-xs text-muted-foreground">
-        quota is always based on the app owner (creator). this user&apos;s plan and optional override set their effective monthly api limit. reset quota clears current month usage for this user.
-      </p>
-      <div className="grid gap-2 text-sm">
-        <div>effective quota this month: {effectiveQuota == null ? '-' : effectiveQuota.toLocaleString()}</div>
-        <div>current month usage: {currentMonthUsage == null ? '-' : currentMonthUsage.toLocaleString()}</div>
-      </div>
-      <div className="flex flex-wrap gap-4 items-end">
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">plan and quota</CardTitle>
+        <CardDescription>
+          quota is always based on the app owner (creator). this user&apos;s plan and optional override set their effective monthly api limit. reset quota clears current month usage for this user.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-2 text-sm">
+          <div>effective quota this month: {effectiveQuota == null ? '-' : effectiveQuota.toLocaleString()}</div>
+          <div>current month usage: {currentMonthUsage == null ? '-' : currentMonthUsage.toLocaleString()}</div>
+        </div>
+        <div className="flex flex-wrap gap-4 items-end">
         <div className="space-y-2">
           <Label htmlFor="admin-plan">plan</Label>
           <Select value={plan} onValueChange={setPlan}>
@@ -476,8 +452,9 @@ export function AdminUserPlanQuota({
         <Button onClick={resetQuota} disabled={busy} variant="outline">
           {busy ? '...' : 'reset quota (current month)'}
         </Button>
-      </div>
-      {message ? <div className="text-xs text-muted-foreground">{message}</div> : null}
-    </div>
+        </div>
+        {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+      </CardContent>
+    </Card>
   );
 }

@@ -1,5 +1,6 @@
 import { connectDB } from '@/lib/db';
 import License from '@/models/License';
+import { Card, CardContent } from '@/components/ui/card';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,14 +12,15 @@ export default async function AdminLicensesPage() {
     .lean();
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-semibold">Licenses</h2>
-        <p className="text-sm text-muted-foreground">latest licenses for investigation</p>
+    <div className="space-y-6">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">Licenses</h1>
+        <p className="text-muted-foreground mt-2">latest licenses for investigation</p>
       </div>
-      <div className="rounded-lg border bg-card p-4">
+      <Card>
+        <CardContent className="p-4">
         {licenses.length === 0 ? (
-          <div className="text-sm text-muted-foreground">no licenses found</div>
+          <p className="text-sm text-muted-foreground">no licenses found</p>
         ) : (
           <table className="w-full text-sm">
             <thead className="text-xs text-muted-foreground border-b">
@@ -45,7 +47,8 @@ export default async function AdminLicensesPage() {
             </tbody>
           </table>
         )}
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

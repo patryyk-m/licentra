@@ -631,64 +631,30 @@ export default function SettingsPage() {
                 <CardDescription>choose which security events you want to be notified about</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground mb-4">
+                  email notifications for security events are coming in a future release.
+                </p>
+                <div className="flex items-center justify-between opacity-60">
                   <div className="space-y-0.5">
                     <Label>New Login Alerts</Label>
                     <p className="text-sm text-muted-foreground">notify when a new device logs in</p>
                   </div>
-                  <Checkbox
-                    checked={preferences.notifications.loginAlerts}
-                    onCheckedChange={(checked) => {
-                      setPreferences({
-                        ...preferences,
-                        notifications: {
-                          ...preferences.notifications,
-                          loginAlerts: checked,
-                        },
-                      });
-                    }}
-                  />
+                  <Checkbox checked={false} disabled />
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between opacity-60">
                   <div className="space-y-0.5">
                     <Label>Password Change Alerts</Label>
                     <p className="text-sm text-muted-foreground">notify when your password is changed</p>
                   </div>
-                  <Checkbox
-                    checked={preferences.notifications.passwordChange}
-                    onCheckedChange={(checked) => {
-                      setPreferences({
-                        ...preferences,
-                        notifications: {
-                          ...preferences.notifications,
-                          passwordChange: checked,
-                        },
-                      });
-                    }}
-                  />
+                  <Checkbox checked={false} disabled />
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between opacity-60">
                   <div className="space-y-0.5">
                     <Label>Session Revoked Alerts</Label>
                     <p className="text-sm text-muted-foreground">notify when sessions are revoked</p>
                   </div>
-                  <Checkbox
-                    checked={preferences.notifications.sessionRevoked}
-                    onCheckedChange={(checked) => {
-                      setPreferences({
-                        ...preferences,
-                        notifications: {
-                          ...preferences.notifications,
-                          sessionRevoked: checked,
-                        },
-                      });
-                    }}
-                  />
+                  <Checkbox checked={false} disabled />
                 </div>
-                <Button onClick={handleUpdatePreferences} disabled={isSavingPreferences}>
-                  <Save className="w-4 h-4 mr-2" />
-                  {isSavingPreferences ? 'saving...' : 'save preferences'}
-                </Button>
               </CardContent>
             </Card>
           </TabsContent>

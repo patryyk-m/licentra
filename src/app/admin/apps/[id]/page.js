@@ -4,6 +4,7 @@ import App from '@/models/App';
 import User from '@/models/User';
 import License from '@/models/License';
 import { AdminAppActions, AdminLicenseActions, AdminNotesPanel } from '@/app/admin/_components/admin-ui';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,50 +23,59 @@ export default async function AdminAppDetailPage({ params }) {
     .lean();
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">{app.name}</h1>
-        <p className="text-sm text-muted-foreground">app id: {app._id.toString()}</p>
+    <div className="space-y-6">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">{app.name}</h1>
+        <p className="text-muted-foreground mt-2">app id: {app._id.toString()}</p>
       </div>
 
-      <div className="rounded-lg border p-4 text-sm space-y-1">
-        <div>status: {app.status}</div>
-        <div>owner: {owner?.username || '-'} ({owner?.email || '-'})</div>
-        <div>licenses: {licenseCount}</div>
-        <div>created: {app.createdAt ? new Date(app.createdAt).toLocaleString() : '-'}</div>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">details</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm space-y-1">
+          <div>status: {app.status}</div>
+          <div>owner: {owner?.username || '-'} ({owner?.email || '-'})</div>
+          <div>licenses: {licenseCount}</div>
+          <div>created: {app.createdAt ? new Date(app.createdAt).toLocaleString() : '-'}</div>
+        </CardContent>
+      </Card>
 
       <AdminAppActions appId={app._id.toString()} status={app.status} />
 
-      <div className="rounded-lg border p-4 space-y-3">
-        <div className="text-sm font-medium">licenses</div>
-        {licenses.length === 0 ? (
-          <div className="text-xs text-muted-foreground">no licenses in this app</div>
-        ) : (
-          <div className="space-y-3">
-            {licenses.map((license) => (
-              <div
-                key={license._id.toString()}
-                className="rounded border p-3 flex items-start justify-between gap-4"
-              >
-                <div className="text-sm">
-                  <a href={`/admin/licenses/${license._id.toString()}`} className="font-mono underline">
-                    {license.key}
-                  </a>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    status: {license.status} | created:{' '}
-                    {license.createdAt ? new Date(license.createdAt).toLocaleString() : '-'}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">licenses</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {licenses.length === 0 ? (
+            <p className="text-sm text-muted-foreground">no licenses in this app</p>
+          ) : (
+            <div className="space-y-3">
+              {licenses.map((license) => (
+                <div
+                  key={license._id.toString()}
+                  className="rounded-lg border p-4 flex items-start justify-between gap-4 bg-muted/30"
+                >
+                  <div className="text-sm">
+                    <a href={`/admin/licenses/${license._id.toString()}`} className="font-mono underline">
+                      {license.key}
+                    </a>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      status: {license.status} | created:{' '}
+                      {license.createdAt ? new Date(license.createdAt).toLocaleString() : '-'}
+                    </div>
                   </div>
+                  <AdminLicenseActions
+                    licenseId={license._id.toString()}
+                    status={license.status}
+                  />
                 </div>
-                <AdminLicenseActions
-                  licenseId={license._id.toString()}
-                  status={license.status}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <AdminNotesPanel targetType="app" targetId={app._id.toString()} />
     </div>

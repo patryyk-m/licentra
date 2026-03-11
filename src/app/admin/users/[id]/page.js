@@ -8,6 +8,7 @@ import ApiUsage from '@/models/ApiUsage';
 import { verifyAccessToken } from '@/lib/auth';
 import { getEffectiveMonthlyQuota } from '@/lib/plan-limits';
 import { AdminNotesPanel, AdminUserActions, AdminUserPlanQuota } from '@/app/admin/_components/admin-ui';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,21 +48,26 @@ export default async function AdminUserDetailPage({ params }) {
   } catch {}
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">{user.username}</h1>
-        <p className="text-sm text-muted-foreground">user id: {user._id.toString()}</p>
+    <div className="space-y-6">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">{user.username}</h1>
+        <p className="text-muted-foreground mt-2">user id: {user._id.toString()}</p>
       </div>
 
-      <div className="rounded-lg border p-4 text-sm space-y-1">
-        <div>email: {user.email}</div>
-        <div>status: {user.status || 'active'}</div>
-        <div>role: {user.role}</div>
-        <div>plan: {user.plan}</div>
-        <div>owned apps: {appCount}</div>
-        <div>created licenses: {licenseCount}</div>
-        <div>created: {user.createdAt ? new Date(user.createdAt).toLocaleString() : '-'}</div>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">details</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm space-y-1">
+          <div>email: {user.email}</div>
+          <div>status: {user.status || 'active'}</div>
+          <div>role: {user.role}</div>
+          <div>plan: {user.plan}</div>
+          <div>owned apps: {appCount}</div>
+          <div>created licenses: {licenseCount}</div>
+          <div>created: {user.createdAt ? new Date(user.createdAt).toLocaleString() : '-'}</div>
+        </CardContent>
+      </Card>
 
       <AdminUserPlanQuota
         userId={user._id.toString()}

@@ -1,5 +1,8 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,33 +48,29 @@ export default async function AdminAppsPage(props) {
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
+    <div className="space-y-6">
+      <div className="mb-8 flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-xl font-semibold">Apps</h2>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-3xl font-bold">Apps</h1>
+          <p className="text-muted-foreground mt-2">
             global view of all apps. use the main apps dashboard for your own apps, use this view to
             investigate abuse and freeze validations where needed.
           </p>
         </div>
         <form className="flex gap-2" action="/admin/apps" method="get">
-          <input
+          <Input
             type="text"
             name="q"
             defaultValue={q}
             placeholder="search by app name"
-            className="border rounded-md px-2 py-1 text-sm bg-background"
+            className="w-[200px]"
           />
-          <button
-            type="submit"
-            className="px-3 py-1 rounded-md text-sm border bg-primary text-primary-foreground"
-          >
-            search
-          </button>
+          <Button type="submit">search</Button>
         </form>
       </div>
 
-      <div className="rounded-lg border bg-card p-4">
+      <Card>
+        <CardContent className="p-4">
         {data.apps.length === 0 ? (
           <div className="text-sm text-muted-foreground">no apps found</div>
         ) : (
@@ -141,7 +140,8 @@ export default async function AdminAppsPage(props) {
             )}
           </>
         )}
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

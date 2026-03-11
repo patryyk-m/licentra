@@ -6,8 +6,41 @@ import Link from 'next/link';
 import { Check, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Footer from '@/components/layout/Footer';
-import { PLAN_LIMITS } from '@/lib/plans';
+import {
+  PLAN_LIMITS,
+  getPlanLimits,
+  getPlanMonthlyValidateQuota,
+  getValidationsPerMinutePerApp,
+} from '@/lib/plan-limits';
 import { toast } from 'sonner';
+import { performStepUp, isStepUpRequired } from '@/lib/step-up';
+
+const formatMonthlyQuota = (value) => {
+  if (!Number.isFinite(value) || value < 0) return 'Unlimited validate API calls / month';
+  return `${value.toLocaleString()} validate API calls / month`;
+};
+
+const COMMON_PLAN_FEATURES = [
+  'up to 100 requests per minute',
+  'Usage analytics and security monitoring',
+  'Custom license formats',
+];
+
+const formatPerAppRateLimit = (value) => {
+  if (!Number.isFinite(value) || value < 0) return 'Unlimited validate requests / minute per app';
+  return `${value.toLocaleString()} validate requests / minute per app`;
+};
+
+const getPlanLimitFeatures = (planId) => {
+  const limits = getPlanLimits(planId);
+  return [
+    formatLimit(limits.apps ?? PLAN_LIMITS.free.apps, 'application'),
+    formatLimit(limits.collaborators ?? PLAN_LIMITS.free.collaborators, 'collaborator'),
+    formatLimit(limits.partners ?? PLAN_LIMITS.free.partners, 'partner'),
+    `${formatMonthlyQuota(getPlanMonthlyValidateQuota(planId))}`,
+    formatPerAppRateLimit(getValidationsPerMinutePerApp(planId)),
+  ];
+};
 
 const PLAN_CARDS = [
   {
@@ -21,14 +54,6 @@ const PLAN_CARDS = [
     ctaLabel: 'Get started',
     ctaHref: '/dashboard',
     ctaVariant: 'outline',
-    baseFeatures: [
-      'Up to 3 applications',
-      '1,000 API requests / month',
-      'Basic analytics & reports',
-      'Email support',
-      'API & webhook access',
-      'Standard security controls',
-    ],
   },
   {
     id: 'pro',
@@ -41,15 +66,6 @@ const PLAN_CARDS = [
     ctaLabel: 'Start free trial',
     ctaHref: '/register',
     includesTrial: true,
-    baseFeatures: [
-      'Unlimited applications',
-      '50,000 API requests / month',
-      'Advanced analytics & alerts',
-      'Priority chat & email support',
-      'API & webhook access',
-      'Custom license formats',
-      'Enhanced security + audit logs',
-    ],
   },
   {
     id: 'business',
@@ -62,15 +78,6 @@ const PLAN_CARDS = [
     ctaLabel: 'Get started',
     ctaHref: '/register?plan=business',
     includesTrial: false,
-    baseFeatures: [
-      'Unlimited applications',
-      'Unlimited API requests',
-      'Advanced analytics & alerts',
-      'Priority chat & email support',
-      'API & webhook access',
-      'Custom license formats',
-      'Enhanced security + audit logs',
-    ],
   },
 ];
 
@@ -89,7 +96,7 @@ const FAQS = [
   },
   {
     question: 'What happens if I exceed my limits?',
-    answer: 'We will notify you well before you hit quota.',
+    answer: 'When your monthly plan quota is reached, validations are blocked and the app is suspended until the new month starts or Licentra support restores access.',
   },
 ];
 
@@ -109,6 +116,7 @@ export default function PricingPage() {
   const [currentBillingCycle, setCurrentBillingCycle] = useState(null);
   const [hasSubscription, setHasSubscription] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userRole, setUserRole] = useState(null);
   const [isPlanLoading, setIsPlanLoading] = useState(true);
   const [processingPlanId, setProcessingPlanId] = useState(null);
 
@@ -124,17 +132,20 @@ export default function PricingPage() {
             setIsLoggedIn(false);
             setCurrentBillingCycle(null);
             setHasSubscription(false);
+            setUserRole(null);
           }
           return;
         }
 
         const result = await response.json();
         const plan = result?.data?.user?.plan;
+        const role = result?.data?.user?.role;
         const subscriptionId = result?.data?.user?.subscription?.stripeSubscriptionId;
         if (isMounted && typeof plan === 'string') {
           setUserPlan(plan.toLowerCase());
           setIsLoggedIn(true);
           setHasSubscription(!!subscriptionId && plan !== 'free');
+          setUserRole(typeof role === 'string' ? role.toLowerCase() : null);
           
           // fetch billing cycle if user has subscription
           if (plan !== 'free' && subscriptionId) {
@@ -158,6 +169,7 @@ export default function PricingPage() {
           setIsLoggedIn(false);
           setCurrentBillingCycle(null);
           setHasSubscription(false);
+          setUserRole(null);
         }
       } finally {
         if (isMounted) {
@@ -209,18 +221,16 @@ export default function PricingPage() {
         }
       } else {
         // different plan or not logged in
-        if (hasExistingSubscription && plan.ctaLabel === 'Start free trial') {
+        if (userRole === 'partner') {
+          buttonLabel = 'Partner account';
+        } else if (hasExistingSubscription && plan.ctaLabel === 'Start free trial') {
           // user has subscription, don't show "Start free trial"
           buttonLabel = 'Get started';
         } else {
           buttonLabel = plan.ctaLabel;
         }
       }
-      const limits = PLAN_LIMITS[plan.id] ?? PLAN_LIMITS.free;
-      const limitFeatures = [
-        formatLimit(limits.collaborators ?? PLAN_LIMITS.free.collaborators, 'collaborator'),
-        formatLimit(limits.partners ?? PLAN_LIMITS.free.partners, 'partner'),
-      ];
+      const features = [...getPlanLimitFeatures(plan.id), ...COMMON_PLAN_FEATURES];
 
       // determine if trial should be shown (only for pro, monthly, and new customers)
       // only show trial if we've confirmed user has no subscription (not still loading)
@@ -236,7 +246,7 @@ export default function PricingPage() {
           isCurrent,
           badgeLabel,
           buttonLabel,
-          features: [...limitFeatures, ...(plan.baseFeatures || [])],
+          features,
           displayPrice: 'Free',
           billedText: 'Forever free',
           showTrial: false,
@@ -253,23 +263,30 @@ export default function PricingPage() {
       // also check if billing cycles match (for button disabled state)
       // if user has this plan, disable button if billing cycles match OR if billing cycle not loaded yet
       const billingCyclesMatch = currentBillingCycle ? billingCycle === currentBillingCycle : false;
-      const shouldDisableButton = isCurrent || (isCurrentPlan && plan.id !== 'free' && (billingCyclesMatch || !currentBillingCycle));
+      const shouldDisableButton =
+        isCurrent ||
+        userRole === 'partner' ||
+        (isCurrentPlan && plan.id !== 'free' && (billingCyclesMatch || !currentBillingCycle));
 
       return {
         ...plan,
         isCurrent,
         badgeLabel,
         buttonLabel,
-        features: [...limitFeatures, ...(plan.baseFeatures || [])],
+        features,
         displayPrice: `$${price}`,
         billedText,
         showTrial,
         shouldDisableButton,
       };
     });
-  }, [billingCycle, userPlan, isLoggedIn, currentBillingCycle, hasSubscription, isPlanLoading]);
+  }, [billingCycle, userPlan, userRole, isLoggedIn, currentBillingCycle, hasSubscription, isPlanLoading]);
 
   const handlePlanClick = async (planId, planHref) => {
+    if (userRole === 'partner') {
+      toast.error('switch to a developer account to change plans');
+      return;
+    }
     // if user is not authenticated, redirect to register
     if (!isLoggedIn) {
       if (planId === 'pro') {
@@ -309,14 +326,26 @@ export default function PricingPage() {
             
             if (currentBillingCycle !== billingCycle) {
               // change billing cycle
-              const response = await fetch('/api/stripe/change-billing-cycle', {
+              let response = await fetch('/api/stripe/change-billing-cycle', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({ billingCycle }),
               });
-
-              const result = await response.json();
+              let result = await response.json();
+              if (isStepUpRequired(response, result)) {
+                if (!(await performStepUp())) {
+                  setProcessingPlanId(null);
+                  return;
+                }
+                response = await fetch('/api/stripe/change-billing-cycle', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify({ billingCycle }),
+                });
+                result = await response.json();
+              }
 
               if (result.success) {
                 toast.success(`switched to ${billingCycle} billing`);
@@ -336,14 +365,26 @@ export default function PricingPage() {
             }
           } else {
             // different plan,use change-plan endpoint
-            const response = await fetch('/api/stripe/change-plan', {
+            let response = await fetch('/api/stripe/change-plan', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
               body: JSON.stringify({ targetPlan: planId }),
             });
-
-            const result = await response.json();
+            let result = await response.json();
+            if (isStepUpRequired(response, result)) {
+              if (!(await performStepUp())) {
+                setProcessingPlanId(null);
+                return;
+              }
+              response = await fetch('/api/stripe/change-plan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ targetPlan: planId }),
+              });
+              result = await response.json();
+            }
 
             if (result.success) {
               toast.success(`plan updated to ${planId}`);
@@ -396,8 +437,13 @@ export default function PricingPage() {
           <div className="mb-8">
             <h1 className="text-3xl font-bold">Pricing</h1>
             <p className="text-muted-foreground mt-2">
-              Start on the Basic plan for free. Upgrade to Pro or Business when you need higher quota or better features.
+              Plan quota is monthly. Per-license validate rate is configured per app (1-100 requests per minute, default 10).
             </p>
+            {userRole === 'partner' && (
+              <p className="text-xs text-muted-foreground mt-1">
+                you are signed in with a partner account. switch to a developer account to manage billing and plans.
+              </p>
+            )}
           </div>
           <div className="mb-8 inline-flex items-center gap-1 p-1 rounded-full border bg-muted">
             {['monthly', 'annual'].map((cycle) => (

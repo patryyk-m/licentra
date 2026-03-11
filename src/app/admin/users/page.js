@@ -1,5 +1,8 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,13 +48,12 @@ export default async function AdminUsersPage(props) {
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
+    <div className="space-y-6">
+      <div className="mb-8 flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-xl font-semibold">Users</h2>
-          <p className="text-sm text-muted-foreground">
-            search across all licentra accounts. dangerous actions like suspending apps or changing
-            billing still require step up on the api routes.
+          <h1 className="text-3xl font-bold">Users</h1>
+          <p className="text-muted-foreground mt-2">
+            search across all licentra accounts. dangerous actions require step up on the api routes.
           </p>
         </div>
         <form className="flex gap-2" action="/admin/users" method="get">
@@ -71,7 +73,8 @@ export default async function AdminUsersPage(props) {
         </form>
       </div>
 
-      <div className="rounded-lg border bg-card p-4">
+      <Card>
+        <CardContent className="p-4">
         {data.users.length === 0 ? (
           <div className="text-sm text-muted-foreground">no users found</div>
         ) : (
@@ -142,7 +145,8 @@ export default async function AdminUsersPage(props) {
             )}
           </>
         )}
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
