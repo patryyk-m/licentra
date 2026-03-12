@@ -3,7 +3,7 @@ export const PLAN_LIMITS = {
     apps: 3,
     collaborators: 1,
     partners: 1,
-    monthlyValidateQuota: 15,
+    monthlyValidateQuota: 150,
     validationsPerMinutePerApp: 500,
   },
   pro: {
@@ -59,6 +59,11 @@ export function getAppLimit(plan = 'free') {
 
 /** per-app validate rate limit (all licenses combined per minute) used with checkAppRateLimit */
 export function getValidationsPerMinutePerApp(plan = 'free') {
+  const override = process.env.VALIDATIONS_PER_MINUTE_PER_APP_TEST;
+  if (override !== undefined && override !== '') {
+    const n = parseInt(override, 10);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
   const v = getPlanLimits(plan).validationsPerMinutePerApp;
   return v == null ? PLAN_LIMITS.free.validationsPerMinutePerApp : v;
 }
