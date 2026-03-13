@@ -79,9 +79,35 @@ export async function POST(req) {
 
     if (isUpgrade) {
       // upgrade: cancel current subscription immediately, create new one
-      const customerId = typeof subscription.customer === 'string' 
-        ? subscription.customer 
+      const customerId = typeof subscription.customer === 'string'
+        ? subscription.customer
         : subscription.customer.id;
+
+      // capture payment method from current subscription
+      const defaultPaymentMethodId = typeof subscription.default_payment_method === 'string'
+        ? subscription.default_payment_method
+        : subscription.default_payment_method?.id;
+
+      // fetch customer invoice_settings or first payment method if subscription has none
+      let paymentMethodForNew = defaultPaymentMethodId;
+      if (!paymentMethodForNew) {
+        const customer = await stripe.customers.retrieve(customerId);
+        if (customer && !customer.deleted) {
+          paymentMethodForNew = customer.invoice_settings?.default_payment_method;
+          if (typeof paymentMethodForNew === 'object') paymentMethodForNew = paymentMethodForNew?.id;
+          if (!paymentMethodForNew) {
+            const paymentMethods = await stripe.paymentMethods.list({ customer: customerId, type: 'card' });
+            paymentMethodForNew = paymentMethods.data[0]?.id;
+          }
+        }
+      }
+
+      if (!paymentMethodForNew) {
+        return fail(
+          'No payment method found. Please add a payment method.',
+          400
+        );
+      }
 
       // cancel current subscription
       await stripe.subscriptions.cancel(subscriptionId);
@@ -90,6 +116,7 @@ export async function POST(req) {
       const newSubscription = await stripe.subscriptions.create({
         customer: customerId,
         items: [{ price: targetPriceId }],
+        default_payment_method: paymentMethodForNew,
         metadata: {
           userId: user.id,
           plan: validated.targetPlan,
