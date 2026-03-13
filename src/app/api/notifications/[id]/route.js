@@ -51,6 +51,41 @@ const deleteHandler = withAuth(async (_req, user, { params }) => {
   return ok({ success: true, data: { deleted: true } });
 }, { unauthorizedMessage: 'Unauthorized' });
 
+const getHandler = withAuth(async (_req, user, { params }) => {
+  const { id } = await params;
+  const notifId = id ? sanitizeObjectId(id) : null;
+  if (!notifId) {
+    return fail('invalid notification id', 400);
+  }
+
+  await connectDB();
+
+  const notif = await Notification.findOne({ _id: notifId, userId: user.id }).lean();
+  if (!notif) {
+    return fail('notification not found', 404);
+  }
+
+  return ok({
+    success: true,
+    data: {
+      id: notif._id.toString(),
+      type: notif.type,
+      isRead: notif.isRead,
+      appId: notif.appId?.toString() || null,
+      licenseId: notif.licenseId?.toString() || null,
+      metadata: notif.metadata || {},
+      createdAt: notif.createdAt,
+    },
+  });
+}, { unauthorizedMessage: 'Unauthorized' });
+
+export const GET = wrapRoute(async function GET(req, { params }) {
+  const rateLimited = checkRateLimit(req, { limit: 60, windowMinutes: 1 });
+  if (rateLimited) return rateLimited;
+
+  return await getHandler(req, { params });
+}, (error) => handleApiError(error, 'notifications_get'));
+
 export const PATCH = wrapRoute(async function PATCH(req, { params }) {
   const rateLimited = checkRateLimit(req, { limit: 30, windowMinutes: 1 });
   if (rateLimited) return rateLimited;

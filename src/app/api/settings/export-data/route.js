@@ -1,6 +1,5 @@
 import { connectDB } from '@/lib/db';
-import { checkRateLimit } from '@/lib/ratelimit';
-import { getAuthRateLimit } from '@/lib/ratelimit';
+import { checkRateLimit, getAuthRateLimit } from '@/lib/ratelimit';
 import User from '@/models/User';
 import App from '@/models/App';
 import License from '@/models/License';
@@ -88,9 +87,14 @@ const getHandler = withAuth(
   { unauthorizedMessage: 'Unauthorized' }
 );
 
+const isExportRateLimitBypassed = () =>
+  ['true', '1', 'yes'].includes(String(process.env.RATE_LIMIT_DISABLED || '').toLowerCase());
+
 export const GET = wrapRoute(async function GET(req) {
-  const rateLimitResponse = checkRateLimit(req, { limit: 3, windowMinutes: 60 });
-  if (rateLimitResponse) return rateLimitResponse;
+  if (!isExportRateLimitBypassed()) {
+    const rateLimitResponse = checkRateLimit(req, getAuthRateLimit('exportData'));
+    if (rateLimitResponse) return rateLimitResponse;
+  }
 
   return await getHandler(req);
 }, (error) => handleApiError(error, 'export_data'));

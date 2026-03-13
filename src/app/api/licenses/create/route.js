@@ -137,6 +137,7 @@ export async function POST(req) {
     }
 
     const generatedKeys = [];
+    const generatedIds = [];
     const hwidLockedValue = hwidLock === true || hwidLock === 'true' || hwidLock === 1;
     let normalizedHwidLimit;
     if (hwidLockedValue) {
@@ -155,7 +156,7 @@ export async function POST(req) {
     for (let i = 0; i < count; i++) {
       const plainKey = generateLicenseKey(effectiveMask, effectiveCharset);
 
-      await License.create({
+      const license = await License.create({
         appId,
         key: plainKey,
         createdBy: user.id,
@@ -168,6 +169,7 @@ export async function POST(req) {
       });
 
       generatedKeys.push(plainKey);
+      generatedIds.push(license._id.toString());
     }
 
     logSecurityEvent(SECURITY_EVENTS.LICENSE_CREATED, {
@@ -222,7 +224,7 @@ export async function POST(req) {
     return NextResponse.json({
       success: true,
       message: `${count} license(s) created`,
-      data: { keys: generatedKeys },
+      data: { keys: generatedKeys, licenses: generatedIds.map((id) => ({ id })) },
     });
   } catch (error) {
     if (debitedPartnerId && debitedAppId && debitedCount > 0) {
