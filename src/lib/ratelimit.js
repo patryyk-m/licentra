@@ -13,42 +13,43 @@ const PROD_LIMITS = {
   auth: {
     login: { limit: 5, windowMinutes: 15 },
     register: { limit: 3, windowMinutes: 60 },
-    refresh: { limit: 30, windowMinutes: 1 },
-    logout: { limit: 20, windowMinutes: 1 },
-    me: { limit: 60, windowMinutes: 1 },
+    refresh: { limit: 60, windowMinutes: 1 },
+    logout: { limit: 30, windowMinutes: 1 },
+    me: { limit: 180, windowMinutes: 1 },
     delete: { limit: 5, windowMinutes: 60 },
     forgotPassword: { limit: 3, windowMinutes: 60 },
     resetPassword: { limit: 5, windowMinutes: 60 },
     changePassword: { limit: 5, windowMinutes: 15 },
+    exportData: { limit: 3, windowMinutes: 60 },
   },
   stripe: {
     checkout: { limit: 10, windowMinutes: 15 },
     webhook: { limit: 1000, windowMinutes: 1 },
-    changePlan: { limit: 5, windowMinutes: 15 },
+    changePlan: { limit: 10, windowMinutes: 15 },
     cancelSubscription: { limit: 5, windowMinutes: 15 },
-    portal: { limit: 10, windowMinutes: 15 },
+    portal: { limit: 15, windowMinutes: 15 },
   },
   licenses: {
     validate: { limit: 100, windowMinutes: 1 },
-    create: { limit: 30, windowMinutes: 1 },
-    update: { limit: 60, windowMinutes: 1 },
+    create: { limit: 60, windowMinutes: 1 },
+    update: { limit: 120, windowMinutes: 1 },
     delete: { limit: 30, windowMinutes: 1 },
-    list: { limit: 60, windowMinutes: 1 },
+    list: { limit: 120, windowMinutes: 1 },
     export: { limit: 10, windowMinutes: 15 },
   },
   apps: {
     create: { limit: 10, windowMinutes: 15 },
-    update: { limit: 30, windowMinutes: 1 },
+    update: { limit: 60, windowMinutes: 1 },
     delete: { limit: 10, windowMinutes: 15 },
-    list: { limit: 60, windowMinutes: 1 },
+    list: { limit: 120, windowMinutes: 1 },
     resetSecret: { limit: 5, windowMinutes: 15 },
-    reorder: { limit: 30, windowMinutes: 1 },
+    reorder: { limit: 60, windowMinutes: 1 },
     restore: { limit: 10, windowMinutes: 15 },
   },
   invites: {
     create: { limit: 20, windowMinutes: 15 },
-    list: { limit: 60, windowMinutes: 1 },
-    delete: { limit: 30, windowMinutes: 1 },
+    list: { limit: 120, windowMinutes: 1 },
+    delete: { limit: 60, windowMinutes: 1 },
   },
   members: {
     remove: { limit: 20, windowMinutes: 15 },
@@ -61,7 +62,10 @@ const PROD_LIMITS = {
   },
 };
 
-const useProdLimits = process.env.NODE_ENV === 'production' && process.env.RATE_LIMIT_DISABLED !== 'true';
+const isRateLimitDisabled =
+  process.env.NODE_ENV !== 'production' ||
+  ['true', '1', 'yes'].includes(String(process.env.RATE_LIMIT_DISABLED || '').toLowerCase());
+const useProdLimits = process.env.NODE_ENV === 'production' && !isRateLimitDisabled;
 
 function getLimit(category, name, subKey) {
   if (!useProdLimits) return UNLIMITED;
@@ -82,6 +86,7 @@ export const RATE_LIMITS = {
     forgotPassword: getLimit('auth', 'forgotPassword') || UNLIMITED,
     resetPassword: getLimit('auth', 'resetPassword') || UNLIMITED,
     changePassword: getLimit('auth', 'changePassword') || UNLIMITED,
+    exportData: getLimit('auth', 'exportData') || UNLIMITED,
   },
   stripe: {
     checkout: getLimit('stripe', 'checkout') || UNLIMITED,
@@ -163,13 +168,21 @@ export function getStripeRateLimit(routeName) {
   return getRateLimit('stripe', routeName);
 }
 
+function isRateLimitDisabledNow() {
+  if (process.env.NODE_ENV !== 'production') return true;
+  const v = String(process.env.RATE_LIMIT_DISABLED || '').toLowerCase();
+  return ['true', '1', 'yes'].includes(v);
+}
+
 // Check rate limit and return if exceeded
 export function checkRateLimit(req, config) {
+  if (isRateLimitDisabledNow()) return null;
+
   if (!config || typeof config !== 'object') {
     console.error('[ratelimit] invalid config provided, using default');
     config = { limit: 60, windowMinutes: 1 };
   }
-  
+
   const limit = config.limit ?? 60;
   const window = config.windowMinutes ?? 1;
   const clientIp = getClientIp(req);

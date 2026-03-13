@@ -43,6 +43,7 @@ const SECURITY_EVENTS = {
   ADMIN_PLAN_CHANGED: 'admin_plan_changed',
   ADMIN_QUOTA_OVERRIDE_CHANGED: 'admin_quota_override_changed',
   ADMIN_QUOTA_RESET: 'admin_quota_reset',
+  ADMIN_USER_DELETED: 'admin_user_deleted',
 };
 
 // event types shown in Settings
