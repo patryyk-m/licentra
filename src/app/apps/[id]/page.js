@@ -429,24 +429,26 @@ export default function AppDetailPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        <div className="mb-8 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button asChild variant="outline"><Link href="/apps">← Back to Apps</Link></Button>
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <Button asChild variant="outline" className="w-fit"><Link href="/apps">← Back to Apps</Link></Button>
             <div>
-              <h1 className="text-3xl font-bold">{app.name}</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold break-words">{app.name}</h1>
               <p className="text-muted-foreground mt-2">app settings, credentials, and security</p>
             </div>
           </div>
         </div>
 
         <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
-          <TabsList>
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+          <TabsList className="w-fit">
             {hasFullAppAccess && <TabsTrigger value="settings">Settings</TabsTrigger>}
             {hasFullAppAccess && <TabsTrigger value="credentials">Credentials</TabsTrigger>}
             {hasFullAppAccess && <TabsTrigger value="code">Code Examples</TabsTrigger>}
             {hasFullAppAccess && <TabsTrigger value="security">Security</TabsTrigger>}
             {canManagePartners && <TabsTrigger value="invites">Invite to App</TabsTrigger>}
           </TabsList>
+          </div>
 
           {hasFullAppAccess && (
             <TabsContent value="settings">
@@ -591,6 +593,29 @@ export default function AppDetailPage() {
           {hasFullAppAccess && (
             <TabsContent value="credentials">
               <Card>
+                <CardHeader><CardTitle>App ID</CardTitle></CardHeader>
+                <CardContent className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    use this in your validate API requests (<span className="font-mono">appId</span>).
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Input type="text" readOnly value={typeof appId === 'string' ? appId : ''} className="font-mono text-sm" />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        if (typeof appId === 'string') {
+                          navigator.clipboard.writeText(appId);
+                          toast.success('app id copied');
+                        }
+                      }}
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="mt-6">
                 <CardHeader><CardTitle>API Secret</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                   {apiSecret ? (

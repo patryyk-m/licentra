@@ -437,7 +437,6 @@ export default function PricingPage() {
           <div className="mb-8">
             <h1 className="text-3xl font-bold">Pricing</h1>
             <p className="text-muted-foreground mt-2">
-              Plan quota is monthly. Per-license validate rate is configured per app (1-100 requests per minute, default 10).
             </p>
             {userRole === 'partner' && (
               <p className="text-xs text-muted-foreground mt-1">

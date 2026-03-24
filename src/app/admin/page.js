@@ -22,9 +22,6 @@ export default async function AdminOverviewPage() {
     <div className="space-y-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Admin overview</h1>
-        <p className="text-muted-foreground mt-2">
-          high level metrics across the whole platform
-        </p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
@@ -105,9 +102,6 @@ export default async function AdminOverviewPage() {
           </CardContent>
         </Card>
       </div>
-      <p className="text-sm text-muted-foreground">
-        dangerous admin actions require step-up authentication
-      </p>
     </div>
   );
 }

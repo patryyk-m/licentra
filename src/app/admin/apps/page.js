@@ -52,10 +52,6 @@ export default async function AdminAppsPage(props) {
       <div className="mb-8 flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold">Apps</h1>
-          <p className="text-muted-foreground mt-2">
-            global view of all apps. use the main apps dashboard for your own apps, use this view to
-            investigate abuse and freeze validations where needed.
-          </p>
         </div>
         <form className="flex gap-2" action="/admin/apps" method="get">
           <Input

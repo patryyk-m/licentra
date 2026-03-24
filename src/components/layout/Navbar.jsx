@@ -3,10 +3,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { User, Settings, LogOut, CreditCard, Shield } from 'lucide-react';
+import { User, Settings, LogOut, CreditCard, Shield, Menu, X } from 'lucide-react';
 import { toast } from 'sonner';
+
+const navLinks = [
+  { href: '/dashboard', label: 'Dashboard' },
+  { href: '/apps', label: 'Apps' },
+  { href: '/pricing', label: 'Pricing' },
+  { href: '/features', label: 'Features' },
+  { href: '/docs', label: 'Documentation' },
+  { href: '/support', label: 'Support' },
+];
 
 export default function Navbar() {
   const router = useRouter();
@@ -14,6 +23,7 @@ export default function Navbar() {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const fetchUser = useCallback(async () => {
     try {
@@ -61,6 +71,10 @@ export default function Navbar() {
   }, [fetchUser]);
 
   useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
     const handleClickOutside = (event) => {
       if (userMenuOpen && !event.target.closest('.user-menu-container')) {
         setUserMenuOpen(false);
@@ -71,6 +85,15 @@ export default function Navbar() {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [userMenuOpen]);
+
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [mobileMenuOpen]);
 
   const handleLogout = async () => {
     try {
@@ -97,34 +120,35 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center">
-            <span className="text-2xl font-bold text-primary">Licentra</span>
+          <Link href="/" className="flex items-center shrink-0">
+            <span className="text-xl sm:text-2xl font-bold text-primary">Licentra</span>
           </Link>
 
-          {/* Navigation Links */}
+          {/* Desktop Navigation Links */}
           <div className="hidden md:flex items-center space-x-8">
-            <Link href="/dashboard" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Dashboard
-            </Link>
-            <Link href="/apps" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Apps
-            </Link>
-            <Link href="/pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Pricing
-            </Link>
-            <Link href="/features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Features
-            </Link>
-            <Link href="/docs" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Documentation
-            </Link>
-            <Link href="/support" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Support
-            </Link>
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {link.label}
+              </Link>
+            ))}
           </div>
 
           {/* Right Side */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+            {/* Mobile menu button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </Button>
             {isLoading ? (
               <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             ) : user ? (
@@ -204,6 +228,32 @@ export default function Navbar() {
             )}
           </div>
         </div>
+
+        {/* Mobile menu panel */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="md:hidden border-t overflow-hidden"
+            >
+              <div className="py-4 flex flex-col gap-1">
+                {navLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </nav>
   );

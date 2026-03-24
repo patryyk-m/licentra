@@ -444,7 +444,6 @@ export function AdminUserPlanQuota({
             onChange={(e) => setOverride(e.target.value)}
             className="w-[140px]"
           />
-          <p className="text-xs text-muted-foreground">leave empty for plan default</p>
         </div>
         <Button onClick={savePlanAndQuota} disabled={busy} variant="default">
           {busy ? 'saving...' : 'save plan / override'}

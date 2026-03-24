@@ -442,11 +442,11 @@ export default function LicensesPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        <div className="mb-8 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button asChild variant="outline"><Link href="/apps">← Back to Apps</Link></Button>
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <Button asChild variant="outline" className="w-fit"><Link href="/apps">← Back to Apps</Link></Button>
             <div>
-              <h1 className="text-3xl font-bold">{app.name} - Licenses</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold break-words">{app.name} - Licenses</h1>
               <p className="text-muted-foreground mt-2">create new licenses or export existing ones</p>
               {user?.role === 'partner' && (
                 <p className="text-sm text-muted-foreground mt-2">
@@ -455,7 +455,7 @@ export default function LicensesPage() {
               )}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 shrink-0">
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
                 <Button
@@ -463,6 +463,7 @@ export default function LicensesPage() {
                     !['developer', 'admin', 'partner'].includes(user.role) ||
                     (user?.role === 'partner' && partnerCredits < 1)
                   }
+                  className="whitespace-nowrap"
                 >
                   + Create Licenses
                 </Button>
@@ -788,8 +789,8 @@ export default function LicensesPage() {
             </Dialog>
 
             {['developer', 'admin'].includes(user.role) && (
-              <Button variant="outline" onClick={handleExport}>
-                <Download className="w-4 h-4 mr-2" />
+              <Button variant="outline" onClick={handleExport} className="whitespace-nowrap">
+                <Download className="w-4 h-4 mr-2 shrink-0" />
                 Export CSV
               </Button>
             )}
@@ -797,12 +798,12 @@ export default function LicensesPage() {
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <Input
               placeholder="search licenses..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="max-w-sm"
+              className="w-full sm:max-w-sm"
             />
             <Button
               variant="outline"
@@ -834,21 +835,21 @@ export default function LicensesPage() {
                     className={license.hasRateLimitAlert ? 'border-amber-500/60 bg-amber-500/5 border-l-4 border-l-amber-500' : ''}
                   >
                   <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 grid grid-cols-7 gap-4 items-center">
-                        <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-4 items-start min-w-0">
+                        <div className="flex items-center gap-2 col-span-2 sm:col-span-1 min-w-0">
                           {license.hasRateLimitAlert && (
                             <span
                               className="inline-flex h-2.5 w-2.5 rounded-full bg-amber-500 shrink-0"
                               title="rate limit alert - check security tab"
                             />
                           )}
-                          <div>
-                            <div className="text-sm font-medium font-mono">{license.key}</div>
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium font-mono truncate">{license.key}</div>
                             <div className="text-xs text-muted-foreground">License Key</div>
                           </div>
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <Badge
                             variant={
                               license.status === 'suspended'
@@ -866,7 +867,7 @@ export default function LicensesPage() {
                           </Badge>
                           <div className="text-xs text-muted-foreground mt-1">Status</div>
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <div className="text-sm">
                             {license.createdAt ? new Date(license.createdAt).toLocaleDateString() : '-'}
                           </div>
@@ -880,13 +881,13 @@ export default function LicensesPage() {
                           <div className="text-sm">{license.expiryDate ? new Date(license.expiryDate).toLocaleDateString() : 'Never'}</div>
                           <div className="text-xs text-muted-foreground">Expiry</div>
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <Badge variant={license.hwidLocked ? 'default' : 'outline'}>
                             {license.hwidLocked ? 'Locked' : 'Unlocked'}
                           </Badge>
                           <div className="text-xs text-muted-foreground mt-1">HWID Lock</div>
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           {license.hwids && license.hwids.length > 0 ? (
                             <div className="text-xs font-mono text-muted-foreground">
                               {license.hwids.length}/{getDisplayLimit(license)} HWID
@@ -897,7 +898,7 @@ export default function LicensesPage() {
                           )}
                           <div className="text-xs text-muted-foreground">HWIDs</div>
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           {license.usage ? (
                             <div className="text-xs space-y-0.5">
                               <div className="font-medium">{license.usage.thisMonth.toLocaleString()}</div>
@@ -911,7 +912,7 @@ export default function LicensesPage() {
                           <div className="text-xs text-muted-foreground">API Calls</div>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2 shrink-0">
                         <Button
                           variant="outline"
                           size="sm"

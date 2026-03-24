@@ -118,7 +118,8 @@ export default function DocsPage() {
 
                 <div>
                   <h3 className="text-lg font-medium mb-2">Request body</h3>
-                  <table className="w-full text-sm border rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                  <table className="w-full min-w-[500px] text-sm border rounded-lg">
                     <thead>
                       <tr className="bg-muted/50">
                         <th className="text-left p-3">Field</th>
@@ -154,6 +155,7 @@ export default function DocsPage() {
                       </tr>
                     </tbody>
                   </table>
+                </div>
                 </div>
 
                 <div>
@@ -195,7 +197,8 @@ export default function DocsPage() {
 
                 <div>
                   <h3 className="text-lg font-medium mb-2">Reason codes</h3>
-                  <table className="w-full text-sm border rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                  <table className="w-full min-w-[500px] text-sm border rounded-lg">
                     <thead>
                       <tr className="bg-muted/50">
                         <th className="text-left p-3">reason</th>
@@ -213,10 +216,12 @@ export default function DocsPage() {
                     </tbody>
                   </table>
                 </div>
+                </div>
 
                 <div>
                   <h3 className="text-lg font-medium mb-2">Error responses</h3>
-                  <table className="w-full text-sm border rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                  <table className="w-full min-w-[500px] text-sm border rounded-lg">
                     <thead>
                       <tr className="bg-muted/50">
                         <th className="text-left p-3">Status</th>
@@ -231,6 +236,7 @@ export default function DocsPage() {
                       <tr className="border-t"><td className="p-3 font-mono">429</td><td className="p-3">Plan quota exceeded for the month (app auto-suspended)</td></tr>
                     </tbody>
                   </table>
+                </div>
                 </div>
               </CardContent>
             </Card>

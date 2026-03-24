@@ -52,9 +52,6 @@ export default async function AdminUsersPage(props) {
       <div className="mb-8 flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold">Users</h1>
-          <p className="text-muted-foreground mt-2">
-            search across all licentra accounts. dangerous actions require step up on the api routes.
-          </p>
         </div>
         <form className="flex gap-2" action="/admin/users" method="get">
           <input

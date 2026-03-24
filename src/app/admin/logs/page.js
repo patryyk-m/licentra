@@ -58,10 +58,6 @@ export default async function AdminLogsPage(props) {
       <div className="mb-8 flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold">Security logs</h1>
-          <p className="text-muted-foreground mt-2">
-            read only view of security and admin actions across the platform. writes go through the
-            normal apis with step up.
-          </p>
         </div>
         <form className="flex gap-2 items-center flex-wrap" action="/admin/logs" method="get">
           <Input
