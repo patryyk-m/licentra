@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { connectDB } from '@/lib/db';
 import { checkRateLimit, getLicenseRateLimit, checkLicenseRateLimit, checkAppRateLimit } from '@/lib/ratelimit';
 import { getEffectiveMonthlyQuota, getValidationsPerMinutePerApp } from '@/lib/plan-limits';
-import { recordRateLimitEvent, checkAndCreateNotification } from '@/lib/email';
+import { recordRateLimitEvent, checkAndCreateNotification, sendPlanQuotaWarningEmail } from '@/lib/email';
 import { getClientIp, getUserAgent, logSecurityEvent, SECURITY_EVENTS } from '@/lib/security';
 import App from '@/models/App';
 import License from '@/models/License';
@@ -14,6 +14,10 @@ import { sanitizeObjectId, sanitizeHwid } from '@/lib/security';
 import { handleApiError } from '@/lib/security';
 
 const MAX_HWIDS = 5;
+
+function isPlanQuotaWarningEmailEnabled() {
+  return ['true', '1', 'yes'].includes(String(process.env.ENABLE_PLAN_QUOTA_WARNING_EMAIL || '').toLowerCase());
+}
 
 const clampHwidLimit = (value) => {
   if (value === undefined || value === null) return 1;
@@ -108,6 +112,27 @@ export async function POST(req) {
     ]);
     const currentMonthUsage = currentMonthUsageAgg?.[0]?.total || 0;
     const ownerOverQuota = currentMonthUsage >= monthlyQuota;
+
+    // Plan quota warning email: ENABLE_PLAN_QUOTA_WARNING_EMAIL=true (pro/business only, once at 90% usage)
+    if (isPlanQuotaWarningEmailEnabled()) {
+      const paidPlan = ['pro', 'business'].includes(String(owner?.plan || 'free').toLowerCase());
+      if (paidPlan && monthlyQuota > 0 && !ownerOverQuota) {
+        const warnAt = Math.floor(monthlyQuota * 0.9);
+        if (warnAt > 0 && currentMonthUsage === warnAt) {
+          const ownerForEmail = await User.findById(app.ownerId).select('email username').lean();
+          if (ownerForEmail?.email) {
+            sendPlanQuotaWarningEmail({
+              to: ownerForEmail.email,
+              username: ownerForEmail.username || 'there',
+              appName: app.name || 'your app',
+              appId: app._id.toString(),
+              currentMonthUsage,
+              monthlyQuota,
+            }).catch(() => {});
+          }
+        }
+      }
+    }
 
     if (
       app.status === 'suspended' &&

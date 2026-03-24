@@ -120,6 +120,52 @@ export async function sendWelcomeEmail(email, username) {
 }
 
 /**
+ * notify plan owner when monthly validation usage reaches warning threshold
+ */
+export async function sendPlanQuotaWarningEmail({
+  to,
+  username,
+  appName,
+  appId,
+  currentMonthUsage,
+  monthlyQuota,
+}) {
+  const pct = monthlyQuota > 0 ? Math.round((currentMonthUsage / monthlyQuota) * 100) : 0;
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;">
+  <table role="presentation" style="width:100%;border-collapse:collapse;">
+    <tr><td style="padding:40px 20px;text-align:center;">
+      <table role="presentation" style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;">
+        <tr><td style="padding:40px 30px;">
+          <h1 style="margin:0 0 16px;color:#1a1a1a;font-size:22px;">Plan quota warning</h1>
+          <p style="margin:0 0 12px;color:#666;font-size:16px;line-height:1.5;">Hi ${String(username || 'there').replace(/</g, '&lt;')},</p>
+          <p style="margin:0 0 12px;color:#666;font-size:16px;line-height:1.5;">
+            Your app <strong>${String(appName || 'App').replace(/</g, '&lt;')}</strong> has used <strong>${currentMonthUsage}</strong> of <strong>${monthlyQuota}</strong> monthly validations this period (${pct}%).
+          </p>
+          <p style="margin:0 0 12px;color:#666;font-size:16px;line-height:1.5;">
+            When the quota is reached, validation may be blocked until the next billing period. Consider upgrading your plan or reducing usage.
+          </p>
+          <p style="margin:16px 0 0;color:#999;font-size:13px;">App ID: <code>${String(appId || '').replace(/</g, '&lt;')}</code></p>
+          <p style="margin:16px 0 0;"><a href="${APP_URL}/billing" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:500;">View billing</a></p>
+        </td></tr>
+      </table>
+      <p style="margin:20px 0 0;color:#999;font-size:12px;">© ${new Date().getFullYear()} Licentra</p>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  return sendEmail({
+    to,
+    subject: 'Licentra: approaching monthly validation quota',
+    html,
+  });
+}
+
+/**
  * send forgot password email with reset link
  * @param {string} email - user email
  * @param {string} resetToken - password reset token
