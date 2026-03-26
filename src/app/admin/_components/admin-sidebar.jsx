@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, AppWindow, FileText } from 'lucide-react';
+import { LayoutDashboard, Users, AppWindow, FileText, Ban } from 'lucide-react';
 import { cn } from '@/components/ui/utils';
 
 const navItems = [
@@ -10,6 +10,7 @@ const navItems = [
   { href: '/admin/users', label: 'users', icon: Users },
   { href: '/admin/apps', label: 'apps', icon: AppWindow },
   { href: '/admin/logs', label: 'security logs', icon: FileText },
+  { href: '/admin/blocked-ips', label: 'blocked ips', icon: Ban },
 ];
 
 export function AdminNav() {

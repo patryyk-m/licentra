@@ -44,6 +44,10 @@ const SECURITY_EVENTS = {
   ADMIN_QUOTA_OVERRIDE_CHANGED: 'admin_quota_override_changed',
   ADMIN_QUOTA_RESET: 'admin_quota_reset',
   ADMIN_USER_DELETED: 'admin_user_deleted',
+  VALIDATE_IP_AUTO_BLOCKED: 'validate_ip_auto_blocked',
+  ADMIN_BLOCKED_IP_ADDED: 'admin_blocked_ip_added',
+  ADMIN_BLOCKED_IP_REMOVED: 'admin_blocked_ip_removed',
+  ADMIN_BLOCKED_IP_MADE_PERMANENT: 'admin_blocked_ip_made_permanent',
 };
 
 // event types shown in Settings

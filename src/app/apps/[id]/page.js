@@ -22,7 +22,6 @@ export default function AppDetailPage() {
   const [user, setUser] = useState(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [validationsPerMinutePerLicense, setValidationsPerMinutePerLicense] = useState(10);
   const [autoSuspendOnRateLimitAbuse, setAutoSuspendOnRateLimitAbuse] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [apiSecret, setApiSecret] = useState('');
@@ -113,7 +112,6 @@ export default function AppDetailPage() {
     setApp(found);
     setName(found.name);
     setDescription(found.description || '');
-    setValidationsPerMinutePerLicense(found.validationsPerMinutePerLicense ?? 10);
     setAutoSuspendOnRateLimitAbuse(found.autoSuspendOnRateLimitAbuse ?? false);
     setHasSecret(Boolean(found.hasApiSecret));
     const cfg = found.partnerLicenseConfig || {};
@@ -149,7 +147,6 @@ export default function AppDetailPage() {
       body: JSON.stringify({
         name,
         description,
-        validationsPerMinutePerLicense: Math.min(Math.max(Number(validationsPerMinutePerLicense) || 10, 1), 100),
         autoSuspendOnRateLimitAbuse,
         partnerLicenseConfig: {
           enabled: partnerDefaultsEnabled,
@@ -480,17 +477,14 @@ export default function AppDetailPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="validationsPerMinutePerLicense">validations per license per minute</Label>
-                      <Input
-                        id="validationsPerMinutePerLicense"
-                        type="number"
-                        min={1}
-                        max={100}
-                        value={validationsPerMinutePerLicense}
-                        onChange={(e) => setValidationsPerMinutePerLicense(Number(e.target.value) || 10)}
-                        disabled={!canEditApp}
-                      />
-                      <p className="text-xs text-muted-foreground">limits how often each license can call the validate api (1–100). default 10.</p>
+                      <Label>validations per license per minute</Label>
+                      <p className="text-sm">
+                        <span className="font-medium tabular-nums">{app?.validationsPerMinutePerLicense ?? '—'}</span>
+                        <span className="text-muted-foreground"> — set by your subscription plan (server-side).</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        free, pro, and business plans each have their own cap to protect platform capacity.
+                      </p>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Checkbox
@@ -633,7 +627,7 @@ export default function AppDetailPage() {
                     <p className="text-muted-foreground">no secret generated yet</p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    remember to copy the secret immediately — it can&apos;t be recovered later.
+                    remember to copy the secret immediately - it can&apos;t be recovered later.
                   </p>
                   <Button onClick={generateOrRegenerate} disabled={!canEditApp}>
                     {hasSecret ? 'Regenerate Secret' : 'Generate Secret'}

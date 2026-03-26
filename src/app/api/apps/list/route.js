@@ -7,7 +7,7 @@ import ApiUsage from '@/models/ApiUsage';
 import User from '@/models/User';
 import { checkRateLimit, getAppRateLimit } from '@/lib/ratelimit';
 import { normalizeRole, ROLE } from '@/lib/authz';
-import { getEffectiveMonthlyQuota } from '@/lib/plan-limits';
+import { getEffectiveMonthlyQuota, getValidationsPerMinutePerLicense } from '@/lib/plan-limits';
 import { fail, wrapRoute } from '@/lib/http';
 
 export const GET = wrapRoute(async function GET(req) {
@@ -160,8 +160,16 @@ export const GET = wrapRoute(async function GET(req) {
 
     const collaboratorSet = new Set(collaboratorIds.map((id) => id.toString()));
 
+    const ownerIdsForPlan = [...new Set(apps.map((a) => a.ownerId?.toString?.()).filter(Boolean))];
+    const ownersForPlans =
+      ownerIdsForPlan.length > 0
+        ? await User.find({ _id: { $in: ownerIdsForPlan } }).select('_id plan').lean()
+        : [];
+    const planByOwnerId = new Map(ownersForPlans.map((o) => [o._id.toString(), o.plan || 'free']));
+
     const sanitized = apps.map((a) => {
       const idString = a._id.toString();
+      const ownerPlan = planByOwnerId.get(a.ownerId?.toString?.() || '') || 'free';
       return {
         id: idString,
         name: a.name,
@@ -171,7 +179,7 @@ export const GET = wrapRoute(async function GET(req) {
         createdAt: a.createdAt,
         updatedAt: a.updatedAt,
         hasApiSecret: !!a.apiSecretHash,
-        validationsPerMinutePerLicense: a.validationsPerMinutePerLicense ?? 10,
+        validationsPerMinutePerLicense: getValidationsPerMinutePerLicense(ownerPlan),
         autoSuspendOnRateLimitAbuse: a.autoSuspendOnRateLimitAbuse ?? false,
         suspensionReason: a.suspensionReason || 'none',
         ownerId: a.ownerId?.toString?.() || '',

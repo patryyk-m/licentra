@@ -382,24 +382,26 @@ export default function SettingsPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1 p-2">
-            <TabsTrigger value="security" className="flex items-center justify-center gap-1.5">
-              <Shield className="w-4 h-4 shrink-0" />
-              <span className="truncate">Security</span>
-            </TabsTrigger>
-            <TabsTrigger value="privacy" className="flex items-center justify-center gap-1.5">
-              <Lock className="w-4 h-4 shrink-0" />
-              <span className="truncate">Privacy</span>
-            </TabsTrigger>
-            <TabsTrigger value="notifications" className="flex items-center justify-center gap-1.5">
-              <Bell className="w-4 h-4 shrink-0" />
-              <span className="truncate">Notifications</span>
-            </TabsTrigger>
-            <TabsTrigger value="audit" className="flex items-center justify-center gap-1.5">
-              <Eye className="w-4 h-4 shrink-0" />
-              <span className="truncate">Audit</span>
-            </TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <TabsList className="w-fit">
+              <TabsTrigger value="security">
+                <Shield className="w-4 h-4 shrink-0" aria-hidden />
+                Security
+              </TabsTrigger>
+              <TabsTrigger value="privacy">
+                <Lock className="w-4 h-4 shrink-0" aria-hidden />
+                Privacy
+              </TabsTrigger>
+              <TabsTrigger value="notifications">
+                <Bell className="w-4 h-4 shrink-0" aria-hidden />
+                Notifications
+              </TabsTrigger>
+              <TabsTrigger value="audit">
+                <Eye className="w-4 h-4 shrink-0" aria-hidden />
+                Audit
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="security" className="space-y-6 mt-6">
             <Card>

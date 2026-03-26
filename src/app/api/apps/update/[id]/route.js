@@ -8,6 +8,8 @@ import { hasAppAccess } from '@/lib/authz';
 import { sanitizeObjectId, sanitizeForDb } from '@/lib/security';
 import { handleApiError } from '@/lib/security';
 import { fail } from '@/lib/http';
+import { getValidationsPerMinutePerLicense } from '@/lib/plan-limits';
+import User from '@/models/User';
 
 export async function PATCH(req, { params }) {
   const rateLimited = checkRateLimit(req, getAppRateLimit('update'));
@@ -73,10 +75,6 @@ export async function PATCH(req, { params }) {
       const desc = sanitizeForDb(body.description.trim(), 500);
       updates.description = desc ?? '';
     }
-    if (typeof body?.validationsPerMinutePerLicense === 'number') {
-      const v = Math.min(Math.max(Math.floor(body.validationsPerMinutePerLicense), 1), 100);
-      updates.validationsPerMinutePerLicense = v;
-    }
     if (typeof body?.autoSuspendOnRateLimitAbuse === 'boolean') {
       updates.autoSuspendOnRateLimitAbuse = body.autoSuspendOnRateLimitAbuse;
     }
@@ -113,6 +111,9 @@ export async function PATCH(req, { params }) {
     Object.assign(app, updates);
     await app.save();
 
+    const ownerForLimits = await User.findById(app.ownerId).select('plan').lean();
+    const validationsPerMinutePerLicense = getValidationsPerMinutePerLicense(ownerForLimits?.plan);
+
     return NextResponse.json({
       success: true,
       message: 'Application updated',
@@ -122,7 +123,7 @@ export async function PATCH(req, { params }) {
           name: app.name,
           description: app.description || '',
           status: app.status,
-          validationsPerMinutePerLicense: app.validationsPerMinutePerLicense ?? 10,
+          validationsPerMinutePerLicense,
           autoSuspendOnRateLimitAbuse: app.autoSuspendOnRateLimitAbuse ?? false,
           partnerLicenseConfig: {
             enabled: app.partnerLicenseConfig?.enabled ?? false,

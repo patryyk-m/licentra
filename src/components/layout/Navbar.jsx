@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { User, Settings, LogOut, CreditCard, Shield, Menu, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 const navLinks = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -139,6 +140,7 @@ export default function Navbar() {
 
           {/* Right Side */}
           <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+            <ThemeToggle />
             {/* Mobile menu button */}
             <Button
               variant="ghost"

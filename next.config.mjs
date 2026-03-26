@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
+  allowedDevOrigins: ['licentra.dev', '*.licentra.dev'],
   // Security headers
   async headers() {
     return [
