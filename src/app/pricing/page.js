@@ -11,6 +11,7 @@ import {
   getPlanLimits,
   getPlanMonthlyValidateQuota,
   getValidationsPerMinutePerApp,
+  getValidationsPerMinutePerLicense,
 } from '@/lib/plan-limits';
 import { toast } from 'sonner';
 import { performStepUp, isStepUpRequired } from '@/lib/step-up';
@@ -21,14 +22,22 @@ const formatMonthlyQuota = (value) => {
 };
 
 const COMMON_PLAN_FEATURES = [
-  'up to 100 requests per minute',
-  'Usage analytics and security monitoring',
+  'Usage limits and abuse monitoring',
   'Custom license formats',
 ];
 
 const formatPerAppRateLimit = (value) => {
-  if (!Number.isFinite(value) || value < 0) return 'Unlimited validate requests / minute per app';
-  return `${value.toLocaleString()} validate requests / minute per app`;
+  if (!Number.isFinite(value) || value < 0) {
+    return 'Unlimited validate requests / minute per app (all licenses combined)';
+  }
+  return `${value.toLocaleString()} validate requests / minute per app (all licenses combined)`;
+};
+
+const formatPerLicenseRateLimit = (value) => {
+  if (!Number.isFinite(value) || value < 0) {
+    return 'Unlimited validate requests / minute per license key';
+  }
+  return `${value.toLocaleString()} validate requests / minute per license key`;
 };
 
 const getPlanLimitFeatures = (planId) => {
@@ -37,8 +46,9 @@ const getPlanLimitFeatures = (planId) => {
     formatLimit(limits.apps ?? PLAN_LIMITS.free.apps, 'application'),
     formatLimit(limits.collaborators ?? PLAN_LIMITS.free.collaborators, 'collaborator'),
     formatLimit(limits.partners ?? PLAN_LIMITS.free.partners, 'partner'),
-    `${formatMonthlyQuota(getPlanMonthlyValidateQuota(planId))}`,
+    formatMonthlyQuota(getPlanMonthlyValidateQuota(planId)),
     formatPerAppRateLimit(getValidationsPerMinutePerApp(planId)),
+    formatPerLicenseRateLimit(getValidationsPerMinutePerLicense(planId)),
   ];
 };
 
@@ -70,7 +80,7 @@ const PLAN_CARDS = [
   {
     id: 'business',
     name: 'Business',
-    description: 'For businesses.',
+    description: 'For businesses. Contact support for extra help or more advanced plans.',
     monthly: 30,
     annual: 24,
     badge: null,
@@ -96,7 +106,8 @@ const FAQS = [
   },
   {
     question: 'What happens if I exceed my limits?',
-    answer: 'When your monthly plan quota is reached, validations are blocked and the app is suspended until the new month starts or Licentra support restores access.',
+    answer:
+      'Over your monthly quota, validate calls stop until it resets. Over the per-minute cap, requests are rate limited until the next minute.',
   },
 ];
 
@@ -436,8 +447,6 @@ export default function PricingPage() {
         <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
           <div className="mb-8">
             <h1 className="text-3xl font-bold">Pricing</h1>
-            <p className="text-muted-foreground mt-2">
-            </p>
             {userRole === 'partner' && (
               <p className="text-xs text-muted-foreground mt-1">
                 you are signed in with a partner account. switch to a developer account to manage billing and plans.

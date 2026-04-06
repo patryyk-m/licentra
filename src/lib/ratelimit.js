@@ -62,10 +62,15 @@ const PROD_LIMITS = {
   },
 };
 
-const isRateLimitDisabled =
-  process.env.NODE_ENV !== 'production' ||
-  ['true', '1', 'yes'].includes(String(process.env.RATE_LIMIT_DISABLED || '').toLowerCase());
-const useProdLimits = process.env.NODE_ENV === 'production' && !isRateLimitDisabled;
+/** true = skip prod limit numbers and skip 429 */
+function isRateLimitDisabledNow() {
+  const raw = String(process.env.RATE_LIMIT_DISABLED || '').toLowerCase().trim();
+  if (['false', '0', 'no'].includes(raw)) return false;
+  if (process.env.NODE_ENV !== 'production') return true;
+  return ['true', '1', 'yes'].includes(raw);
+}
+
+const useProdLimits = !isRateLimitDisabledNow();
 
 function getLimit(category, name, subKey) {
   if (!useProdLimits) return UNLIMITED;
@@ -168,16 +173,7 @@ export function getStripeRateLimit(routeName) {
   return getRateLimit('stripe', routeName);
 }
 
-function isRateLimitDisabledNow() {
-  if (process.env.NODE_ENV !== 'production') return true;
-  const v = String(process.env.RATE_LIMIT_DISABLED || '').toLowerCase();
-  return ['true', '1', 'yes'].includes(v);
-}
-
-// Check rate limit and return if exceeded
-export function checkRateLimit(req, config) {
-  if (isRateLimitDisabledNow()) return null;
-
+function evaluateRateLimitBucket(req, config) {
   if (!config || typeof config !== 'object') {
     console.error('[ratelimit] invalid config provided, using default');
     config = { limit: 60, windowMinutes: 1 };
@@ -188,43 +184,74 @@ export function checkRateLimit(req, config) {
   const clientIp = getClientIp(req);
   const url = new URL(req.url);
   const bucketKey = `${clientIp}:${req.method}:${url.pathname}`;
-  
+
   const now = Date.now();
   const windowMs = window * 60 * 1000;
-  
+
   const record = rateLimitMap.get(bucketKey);
-  
+
   if (!record) {
     rateLimitMap.set(bucketKey, {
       count: 1,
       resetAt: now + windowMs,
     });
-    return null;
+    return { exceeded: false };
   }
-  
+
   if (now > record.resetAt) {
     rateLimitMap.set(bucketKey, {
       count: 1,
       resetAt: now + windowMs,
     });
-    return null;
+    return { exceeded: false };
   }
-  
+
   if (record.count >= limit) {
     logRateLimitEvent(clientIp, url.pathname, req).catch(() => {});
-    
-    return NextResponse.json(
+    return { exceeded: true };
+  }
+
+  record.count++;
+  rateLimitMap.set(bucketKey, record);
+  return { exceeded: false };
+}
+
+// Check rate limit and return if exceeded
+export function checkRateLimit(req, config) {
+  if (isRateLimitDisabledNow()) return null;
+
+  const r = evaluateRateLimitBucket(req, config);
+  if (!r.exceeded) return null;
+
+  return NextResponse.json(
+    {
+      success: false,
+      message: 'Too many requests. Please try again later.',
+    },
+    { status: 429 }
+  );
+}
+
+/**
+ * validate route only: always updates the ip bucket so strikes can fire even when
+ * RATE_LIMIT_DISABLED / non-prod suppresses 429 responses.
+ */
+export function checkRateLimitValidate(req, config) {
+  const r = evaluateRateLimitBucket(req, config);
+  if (!r.exceeded) return { response: null, strike: false };
+  if (isRateLimitDisabledNow()) {
+    return { response: null, strike: true };
+  }
+  return {
+    response: NextResponse.json(
       {
         success: false,
         message: 'Too many requests. Please try again later.',
       },
       { status: 429 }
-    );
-  }
-  
-  record.count++;
-  rateLimitMap.set(bucketKey, record);
-  return null;
+    ),
+    strike: true,
+  };
 }
 
 // Clean up old rate limit records

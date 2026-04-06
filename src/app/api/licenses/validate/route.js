@@ -1,10 +1,20 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { connectDB } from '@/lib/db';
-import { checkRateLimit, getLicenseRateLimit, checkLicenseRateLimit, checkAppRateLimit } from '@/lib/ratelimit';
-import { getEffectiveMonthlyQuota, getValidationsPerMinutePerApp } from '@/lib/plan-limits';
+import {
+  checkRateLimitValidate,
+  getLicenseRateLimit,
+  checkLicenseRateLimit,
+  checkAppRateLimit,
+} from '@/lib/ratelimit';
+import {
+  getEffectiveMonthlyQuota,
+  getValidationsPerMinutePerApp,
+  getValidationsPerMinutePerLicense,
+} from '@/lib/plan-limits';
 import { recordRateLimitEvent, checkAndCreateNotification, sendPlanQuotaWarningEmail } from '@/lib/email';
 import { getClientIp, getUserAgent, logSecurityEvent, SECURITY_EVENTS } from '@/lib/security';
+import { isBlockedIpFast, recordValidateStrike } from '@/lib/validate-ip-abuse';
 import App from '@/models/App';
 import License from '@/models/License';
 import ApiUsage from '@/models/ApiUsage';
@@ -14,6 +24,39 @@ import { sanitizeObjectId, sanitizeHwid } from '@/lib/security';
 import { handleApiError } from '@/lib/security';
 
 const MAX_HWIDS = 5;
+
+function logValidateConcurrentReject(kind, detail = {}) {
+  console.warn('[licenses_validate] concurrent_limit', kind, detail);
+}
+
+let validateInFlight = 0;
+const validateInFlightByIp = new Map();
+const validateInFlightByLicenseId = new Map();
+
+function getValidateMaxConcurrent() {
+  const raw = process.env.VALIDATE_MAX_CONCURRENT;
+  if (raw === undefined || raw === '') return 12;
+  const n = parseInt(String(raw), 10);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(n, 500);
+}
+
+/** one ip cannot hold all global slots */
+function getValidateMaxConcurrentPerIp() {
+  const raw = process.env.VALIDATE_MAX_CONCURRENT_PER_IP;
+  if (raw === undefined || raw === '') return 4;
+  const n = parseInt(String(raw), 10);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(n, 100);
+}
+
+function getValidateMaxConcurrentPerLicense() {
+  const raw = process.env.VALIDATE_MAX_CONCURRENT_PER_LICENSE;
+  if (raw === undefined || raw === '') return 6;
+  const n = parseInt(String(raw), 10);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(n, 100);
+}
 
 function isPlanQuotaWarningEmailEnabled() {
   return ['true', '1', 'yes'].includes(String(process.env.ENABLE_PLAN_QUOTA_WARNING_EMAIL || '').toLowerCase());
@@ -32,12 +75,23 @@ const resolveEffectiveLimit = (licenseDoc) => {
   return licenseDoc.hwidLocked ? configuredLimit : MAX_HWIDS;
 };
 
+/** wrong app id / license / state — counts toward ip auto-block when VALIDATE_IP_AUTO_BLOCK is on */
+const STRIKE_ON_INVALID_VALIDATE_REASONS = new Set([
+  'app_not_found',
+  'license_not_found',
+  'license_not_active',
+  'license_expired',
+]);
+
 function responseInvalid(reason, req, meta = {}) {
+  if (req && STRIKE_ON_INVALID_VALIDATE_REASONS.has(reason)) {
+    recordValidateStrike(getClientIp(req), `validate_${reason}`);
+  }
   logSecurityEvent(SECURITY_EVENTS.LICENSE_VALIDATION_FAILED, {
     reason,
     appId: meta.appId,
-    ip: getClientIp(req),
-    userAgent: getUserAgent(req),
+    ip: req ? getClientIp(req) : 'unknown',
+    userAgent: req ? getUserAgent(req) : 'unknown',
     ...meta,
   }).catch(() => {});
   return NextResponse.json({
@@ -55,8 +109,63 @@ const getMonthWindow = () => {
 };
 
 export async function POST(req) {
-  const rateLimited = checkRateLimit(req, getLicenseRateLimit('validate'));
-  if (rateLimited) return rateLimited;
+  const clientIp = getClientIp(req);
+
+  if (isBlockedIpFast(clientIp)) {
+    return NextResponse.json({ success: false, message: 'access denied' }, { status: 403 });
+  }
+
+  const ipRate = checkRateLimitValidate(req, getLicenseRateLimit('validate'));
+  if (ipRate.strike) {
+    recordValidateStrike(clientIp, 'ip_rate_limit');
+  }
+  if (ipRate.response) {
+    return ipRate.response;
+  }
+  const maxPerIp = getValidateMaxConcurrentPerIp();
+  const maxGlobal = getValidateMaxConcurrent();
+
+  if (maxPerIp > 0) {
+    const cur = validateInFlightByIp.get(clientIp) || 0;
+    if (cur >= maxPerIp) {
+      logValidateConcurrentReject('per_ip', { ip: clientIp, limit: maxPerIp, inFlight: cur });
+      recordValidateStrike(clientIp, 'per_ip_concurrent');
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Too many parallel validation requests from this address. Slow down and try again.',
+        },
+        { status: 429 }
+      );
+    }
+  }
+
+  if (maxGlobal > 0) {
+    if (validateInFlight >= maxGlobal) {
+      logValidateConcurrentReject('global', { limit: maxGlobal, inFlight: validateInFlight });
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Too many concurrent validation requests. Try again later.',
+        },
+        { status: 429 }
+      );
+    }
+  }
+
+  let acquiredPerIp = false;
+  let acquiredGlobal = false;
+  let acquiredLicenseConcurrent = false;
+  let licenseIdForConcurrent = null;
+
+  if (maxPerIp > 0) {
+    validateInFlightByIp.set(clientIp, (validateInFlightByIp.get(clientIp) || 0) + 1);
+    acquiredPerIp = true;
+  }
+  if (maxGlobal > 0) {
+    validateInFlight += 1;
+    acquiredGlobal = true;
+  }
 
   try {
     const body = await req.json();
@@ -85,7 +194,7 @@ export async function POST(req) {
     await connectDB();
 
     const app = await App.findById(appId).select(
-      '+apiSecretHash status ownerId validationsPerMinutePerLicense quotaSuspended quotaSuspendedMonth suspensionReason'
+      '+apiSecretHash status ownerId quotaSuspended quotaSuspendedMonth suspensionReason'
     );
     if (!app) {
       return responseInvalid('app_not_found', req, { appId: appId?.toString() });
@@ -148,6 +257,7 @@ export async function POST(req) {
     }
 
     if (app.status !== 'active') {
+      recordValidateStrike(clientIp, 'app_suspended_validate');
       await logSecurityEvent(SECURITY_EVENTS.APP_VALIDATION_BLOCKED_APP_SUSPENDED, {
         appId: app._id.toString(),
         appStatus: app.status,
@@ -170,26 +280,7 @@ export async function POST(req) {
       );
     }
 
-    const isSecretValid = await verifyPassword(apiSecret, app.apiSecretHash);
-    if (!isSecretValid) {
-      return NextResponse.json(
-        { success: false, message: 'invalid credentials' },
-        { status: 401 }
-      );
-    }
-
-    const perAppLimit = getValidationsPerMinutePerApp(owner?.plan);
-    if (perAppLimit > 0) {
-      const appLimitResult = await checkAppRateLimit(app._id, perAppLimit);
-      if (appLimitResult.exceeded) {
-        return NextResponse.json(
-          { success: false, message: 'Too many validation requests for this app. Try again later.' },
-          { status: 429 }
-        );
-      }
-    }
-
-    // plan quota (monthly, owner-level)
+    // plan quota (monthly) before bcrypt — avoids expensive verify when owner is already over quota
     if (currentMonthUsage >= monthlyQuota) {
       app.status = 'suspended';
       app.quotaSuspended = true;
@@ -211,6 +302,26 @@ export async function POST(req) {
       );
     }
 
+    const isSecretValid = await verifyPassword(apiSecret, app.apiSecretHash);
+    if (!isSecretValid) {
+      recordValidateStrike(clientIp, 'invalid_api_secret');
+      return NextResponse.json(
+        { success: false, message: 'invalid credentials' },
+        { status: 401 }
+      );
+    }
+
+    const perAppLimit = getValidationsPerMinutePerApp(owner?.plan);
+    if (perAppLimit > 0) {
+      const appLimitResult = await checkAppRateLimit(app._id, perAppLimit);
+      if (appLimitResult.exceeded) {
+        return NextResponse.json(
+          { success: false, message: 'Too many validation requests for this app. Try again later.' },
+          { status: 429 }
+        );
+      }
+    }
+
     const license = await License.findOne({
       appId: app._id,
       key: licenseKey,
@@ -228,15 +339,34 @@ export async function POST(req) {
       return responseInvalid('license_expired', req, { appId: app._id.toString(), licenseId: license._id.toString() });
     }
 
-    const perLicenseLimit = Math.min(
-      Math.max(Number(app.validationsPerMinutePerLicense) || 10, 1),
-      100
-    );
+    const maxConcurrentPerLicense = getValidateMaxConcurrentPerLicense();
+    licenseIdForConcurrent = license._id.toString();
+    if (maxConcurrentPerLicense > 0) {
+      const licCur = validateInFlightByLicenseId.get(licenseIdForConcurrent) || 0;
+      if (licCur >= maxConcurrentPerLicense) {
+        logValidateConcurrentReject('per_license', {
+          licenseId: licenseIdForConcurrent,
+          limit: maxConcurrentPerLicense,
+          inFlight: licCur,
+        });
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'Too many parallel validation requests for this license. Try again later.',
+          },
+          { status: 429 }
+        );
+      }
+      validateInFlightByLicenseId.set(licenseIdForConcurrent, licCur + 1);
+      acquiredLicenseConcurrent = true;
+    }
+
+    const perLicenseLimit = getValidationsPerMinutePerLicense(owner?.plan);
     const licenseLimitResult = await checkLicenseRateLimit(license._id, perLicenseLimit);
     if (licenseLimitResult.exceeded) {
-      const clientIp = getClientIp(req);
-      await recordRateLimitEvent(app._id, license._id, clientIp);
-      await checkAndCreateNotification(app._id, license._id);
+      const ipForEvent = getClientIp(req);
+      recordRateLimitEvent(app._id, license._id, ipForEvent).catch(() => {});
+      checkAndCreateNotification(app._id, license._id).catch(() => {});
       return NextResponse.json(
         { success: false, message: 'Too many validation requests for this license. Try again later.' },
         { status: 429 }
@@ -355,6 +485,18 @@ export async function POST(req) {
     });
   } catch (error) {
     return handleApiError(error, 'licenses_validate');
+  } finally {
+    if (acquiredLicenseConcurrent && licenseIdForConcurrent) {
+      const ln = (validateInFlightByLicenseId.get(licenseIdForConcurrent) || 0) - 1;
+      if (ln <= 0) validateInFlightByLicenseId.delete(licenseIdForConcurrent);
+      else validateInFlightByLicenseId.set(licenseIdForConcurrent, ln);
+    }
+    if (acquiredPerIp) {
+      const next = (validateInFlightByIp.get(clientIp) || 0) - 1;
+      if (next <= 0) validateInFlightByIp.delete(clientIp);
+      else validateInFlightByIp.set(clientIp, next);
+    }
+    if (acquiredGlobal) validateInFlight -= 1;
   }
 }
 

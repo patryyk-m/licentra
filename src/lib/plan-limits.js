@@ -1,24 +1,27 @@
 export const PLAN_LIMITS = {
   free: {
-    apps: 3,
+    apps: 2,
     collaborators: 1,
     partners: 1,
-    monthlyValidateQuota: 150,
-    validationsPerMinutePerApp: 500,
+    monthlyValidateQuota: 500,
+    validationsPerMinutePerApp: 10,
+    validationsPerMinutePerLicense: 5,
   },
   pro: {
-    apps: -1, // unlimited
-    collaborators: 3,
-    partners: 5,
-    monthlyValidateQuota: 3000,
-    validationsPerMinutePerApp: 2000,
+    apps: 6,
+    collaborators: 2,
+    partners: 3,
+    monthlyValidateQuota: 2000,
+    validationsPerMinutePerApp: 30,
+    validationsPerMinutePerLicense: 12,
   },
   business: {
-    apps: -1, // unlimited
-    collaborators: 5,
-    partners: -1, // unlimited
-    monthlyValidateQuota: 10000,
-    validationsPerMinutePerApp: 10000,
+    apps: 8,
+    collaborators: 4,
+    partners: 12,
+    monthlyValidateQuota: 6000,
+    validationsPerMinutePerApp: 60,
+    validationsPerMinutePerLicense: 20,
   },
 };
 
@@ -66,5 +69,12 @@ export function getValidationsPerMinutePerApp(plan = 'free') {
   }
   const v = getPlanLimits(plan).validationsPerMinutePerApp;
   return v == null ? PLAN_LIMITS.free.validationsPerMinutePerApp : v;
+}
+
+/** per-license validate cap  */
+export function getValidationsPerMinutePerLicense(plan = 'free') {
+  const v = getPlanLimits(plan).validationsPerMinutePerLicense;
+  const n = v == null ? PLAN_LIMITS.free.validationsPerMinutePerLicense : v;
+  return Math.min(Math.max(Math.floor(Number(n)) || 1, 1), 100);
 }
 

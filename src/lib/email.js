@@ -165,6 +165,73 @@ export async function sendPlanQuotaWarningEmail({
   });
 }
 
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+const VALIDATE_IP_AUTO_BLOCK_DIGEST_EMAIL = 'licentra.support@gmail.com';
+
+export async function sendValidateIpAutoBlockDigestEmail(events) {
+  if (!events?.length) return { success: false, error: 'no events' };
+  if (!process.env.RESEND_API_KEY) {
+    console.error('[email] RESEND_API_KEY not configured');
+    return { success: false, error: 'email service not configured' };
+  }
+
+  const count = events.length;
+  const rows = events
+    .map(
+      (e) =>
+        `<tr><td style="padding:8px;border:1px solid #e5e5e5;font-family:monospace;font-size:13px;">${escapeHtml(e.ip)}</td>` +
+        `<td style="padding:8px;border:1px solid #e5e5e5;font-size:13px;">${escapeHtml(e.reason)}</td>` +
+        `<td style="padding:8px;border:1px solid #e5e5e5;font-size:12px;color:#666;">${escapeHtml(e.blockedUntil)}</td></tr>`
+    )
+    .join('');
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;">
+  <table role="presentation" style="width:100%;border-collapse:collapse;">
+    <tr><td style="padding:40px 20px;text-align:center;">
+      <table role="presentation" style="max-width:640px;margin:0 auto;background:#fff;border-radius:8px;">
+        <tr><td style="padding:40px 30px;text-align:left;">
+          <h1 style="margin:0 0 16px;color:#b91c1c;font-size:20px;">Validate abuse: IP auto-blocked</h1>
+          <p style="margin:0 0 16px;color:#666;font-size:15px;line-height:1.5;">
+            One or more client IPs hit the strike threshold and were automatically blocked on <code>/api/licenses/validate</code>.
+          </p>
+          <p style="margin:0 0 8px;color:#666;font-size:14px;"><strong>${count}</strong> block event(s) (up to 10 most recent before send).</p>
+          <p style="margin:0 0 20px;color:#888;font-size:13px;">Full list is in admin.</p>
+          <table style="width:100%;border-collapse:collapse;margin:0 0 24px;">
+            <thead><tr>
+              <th style="text-align:left;padding:8px;border:1px solid #e5e5e5;background:#f9fafb;font-size:12px;">IP</th>
+              <th style="text-align:left;padding:8px;border:1px solid #e5e5e5;background:#f9fafb;font-size:12px;">Reason</th>
+              <th style="text-align:left;padding:8px;border:1px solid #e5e5e5;background:#f9fafb;font-size:12px;">Blocked until (UTC)</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <p style="margin:0;"><a href="${APP_URL}/admin/blocked-ips" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;">Open blocked IPs</a></p>
+        </td></tr>
+      </table>
+      <p style="margin:20px 0 0;color:#999;font-size:12px;">© ${new Date().getFullYear()} Licentra</p>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  const subject =
+    count === 1
+      ? `Licentra: IP auto-blocked (${events[0].ip})`
+      : `Licentra: ${count} IPs auto-blocked on validate`;
+
+  return sendEmail({ to: VALIDATE_IP_AUTO_BLOCK_DIGEST_EMAIL, subject, html });
+}
+
 /**
  * send forgot password email with reset link
  * @param {string} email - user email
@@ -322,7 +389,7 @@ export async function checkAndCreateNotification(appId, licenseId) {
     if (rateLimitedCount >= 50) severity = 'critical';
 
     const title = `Rate limit abuse: ${app.name} / ${licenseKey}`;
-    const message = `${rateLimitedCount} blocked (429) requests from ${uniqueIpCount} IP${uniqueIpCount > 1 ? 's' : ''} in last 10 min${shouldSuspend ? ' — license auto-suspended' : ''}`;
+    const message = `${rateLimitedCount} blocked (429) requests from ${uniqueIpCount} IP${uniqueIpCount > 1 ? 's' : ''} in last 10 min${shouldSuspend ? ' - license auto-suspended' : ''}`;
 
     const existing = await Notification.findOne({
       appId,

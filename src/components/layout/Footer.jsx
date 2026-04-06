@@ -48,8 +48,8 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/docs" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Documentation
+                <Link href="/billing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Billing
                 </Link>
               </li>
             </ul>

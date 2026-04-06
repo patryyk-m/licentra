@@ -37,12 +37,6 @@ const AppSchema = new Schema(
       type: Number,
       default: 0,
     },
-    validationsPerMinutePerLicense: {
-      type: Number,
-      default: 10,
-      min: 1,
-      max: 100,
-    },
     autoSuspendOnRateLimitAbuse: {
       type: Boolean,
       default: false,
