@@ -15,6 +15,21 @@ const FROM_EMAIL = process.env.MAIL_FROM || 'no-reply@system.licentra.dev';
 // base url for links
 const APP_URL = getSafeAppBaseUrl();
 const WINDOW_MS = 10 * 60 * 1000;
+const RATE_LIMIT_NOTIFICATION_CHECK_COOLDOWN_MS = 60 * 1000;
+const rateLimitNotificationCheckCache = new Map();
+
+function shouldRunRateLimitNotificationCheck(appId, licenseId) {
+  const key = `${appId}:${licenseId}`;
+  const now = Date.now();
+  const lastCheckedAt = rateLimitNotificationCheckCache.get(key) || 0;
+
+  if (now - lastCheckedAt < RATE_LIMIT_NOTIFICATION_CHECK_COOLDOWN_MS) {
+    return false;
+  }
+
+  rateLimitNotificationCheckCache.set(key, now);
+  return true;
+}
 
 const MASK_IP = (ip) => {
   if (!ip || ip === 'unknown') return '***';
@@ -346,6 +361,8 @@ export async function recordRateLimitEvent(appId, licenseId, ip) {
 }
 
 export async function checkAndCreateNotification(appId, licenseId) {
+  if (!shouldRunRateLimitNotificationCheck(appId, licenseId)) return;
+
   try {
     const windowStart = new Date(Date.now() - WINDOW_MS);
     const events = await RateLimitEvent.find({

@@ -12,13 +12,13 @@ export const COOKIE_CATEGORIES = {
   analytics: {
     id: 'analytics',
     name: 'analytics and performance cookies',
-    description: 'help us see how people use the site so we can improve it. the data is anonymous. if you turn these off we will not know when you visited.',
+    description: '.',
     required: false,
   },
   marketing: {
     id: 'marketing',
     name: 'marketing and advertising cookies',
-    description: 'used by our ad partners to show you relevant ads on other sites. they use your browser, not your name. if you turn these off you will see less targeted ads.',
+    description: '.',
     required: false,
   },
 };

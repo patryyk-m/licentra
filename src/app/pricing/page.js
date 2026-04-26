@@ -6,13 +6,7 @@ import Link from 'next/link';
 import { Check, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Footer from '@/components/layout/Footer';
-import {
-  PLAN_LIMITS,
-  getPlanLimits,
-  getPlanMonthlyValidateQuota,
-  getValidationsPerMinutePerApp,
-  getValidationsPerMinutePerLicense,
-} from '@/lib/plan-limits';
+import { PLAN_LIMITS, getPlanLimits, getPlanMonthlyValidateQuota } from '@/lib/plan-limits';
 import { toast } from 'sonner';
 import { performStepUp, isStepUpRequired } from '@/lib/step-up';
 
@@ -26,20 +20,6 @@ const COMMON_PLAN_FEATURES = [
   'Custom license formats',
 ];
 
-const formatPerAppRateLimit = (value) => {
-  if (!Number.isFinite(value) || value < 0) {
-    return 'Unlimited validate requests / minute per app (all licenses combined)';
-  }
-  return `${value.toLocaleString()} validate requests / minute per app (all licenses combined)`;
-};
-
-const formatPerLicenseRateLimit = (value) => {
-  if (!Number.isFinite(value) || value < 0) {
-    return 'Unlimited validate requests / minute per license key';
-  }
-  return `${value.toLocaleString()} validate requests / minute per license key`;
-};
-
 const getPlanLimitFeatures = (planId) => {
   const limits = getPlanLimits(planId);
   return [
@@ -47,8 +27,6 @@ const getPlanLimitFeatures = (planId) => {
     formatLimit(limits.collaborators ?? PLAN_LIMITS.free.collaborators, 'collaborator'),
     formatLimit(limits.partners ?? PLAN_LIMITS.free.partners, 'partner'),
     formatMonthlyQuota(getPlanMonthlyValidateQuota(planId)),
-    formatPerAppRateLimit(getValidationsPerMinutePerApp(planId)),
-    formatPerLicenseRateLimit(getValidationsPerMinutePerLicense(planId)),
   ];
 };
 
@@ -106,8 +84,7 @@ const FAQS = [
   },
   {
     question: 'What happens if I exceed my limits?',
-    answer:
-      'Over your monthly quota, validate calls stop until it resets. Over the per-minute cap, requests are rate limited until the next minute.',
+    answer: 'Over your monthly quota, validate calls stop until the quota resets at the next month.',
   },
 ];
 

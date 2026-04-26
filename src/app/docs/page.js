@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Footer from '@/components/layout/Footer';
-import { Copy, Check, BookOpen, Terminal, Lock, Zap, Shield, Mail } from 'lucide-react';
+import { Copy, Check, BookOpen, Terminal, Lock, Shield, Mail } from 'lucide-react';
 import { useState } from 'react';
 
 const BASE_URL = typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com';
@@ -37,7 +37,6 @@ const DOC_SECTIONS = [
   { id: 'quick-start', label: 'Quick start', icon: BookOpen },
   { id: 'validate-api', label: 'Validate API', icon: Terminal },
   { id: 'device-binding', label: 'Device binding (HWID)', icon: Lock },
-  { id: 'rate-limits', label: 'Rate limits', icon: Zap },
   { id: 'plan-quotas', label: 'Plan quotas', icon: Shield },
   { id: 'examples', label: 'Code examples', icon: Terminal },
   { id: 'contact', label: 'Contact', icon: Mail },
@@ -232,7 +231,6 @@ export default function DocsPage() {
                       <tr className="border-t"><td className="p-3 font-mono">400</td><td className="p-3">Missing appId, apiSecret or licenseKey</td></tr>
                       <tr className="border-t"><td className="p-3 font-mono">401</td><td className="p-3">Invalid API secret (invalid credentials)</td></tr>
                       <tr className="border-t"><td className="p-3 font-mono">403</td><td className="p-3">App suspended</td></tr>
-                      <tr className="border-t"><td className="p-3 font-mono">429</td><td className="p-3">Rate limit exceeded (IP, per-license, or per-app)</td></tr>
                       <tr className="border-t"><td className="p-3 font-mono">429</td><td className="p-3">Plan quota exceeded for the month (app auto-suspended)</td></tr>
                     </tbody>
                   </table>
@@ -266,28 +264,6 @@ export default function DocsPage() {
             </Card>
           </section>
 
-          <section id="rate-limits" className="mb-12 scroll-mt-8">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Zap className="w-5 h-5" />
-                  Rate limits
-                </CardTitle>
-                <CardDescription>protect the API from abuse</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <ul className="text-muted-foreground space-y-2">
-                  <li><strong>IP:</strong> 100 requests per minute per IP</li>
-                  <li><strong>Per license:</strong> Configurable per app (1–100 per minute, default 10)</li>
-                  <li><strong>Per app:</strong> Plan based (see Plan quotas below)</li>
-                </ul>
-                <p className="text-sm text-muted-foreground">
-                  When a license exceeds its per-minute limit, 429 is returned. Licenses with 50+ blocked requests in 10 minutes may trigger auto-suspend if enabled in the app settings.
-                </p>
-              </CardContent>
-            </Card>
-          </section>
-
           <section id="plan-quotas" className="mb-12 scroll-mt-8">
             <Card>
               <CardHeader>
@@ -299,7 +275,7 @@ export default function DocsPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">
-                  each plan has a monthly validation quota and a per-minute limit per app. when quota is exceeded, the app is suspended until the next month. quota resets monthly. see the <Link href="/pricing" className="underline hover:text-primary">pricing page</Link> for current limits.
+                  Each plan has a monthly validation quota. When quota is exceeded, the app is suspended until the next month. Quota resets monthly. See the <Link href="/pricing" className="underline hover:text-primary">pricing page</Link> for current limits.
                 </p>
               </CardContent>
             </Card>

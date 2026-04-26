@@ -11,7 +11,6 @@ import {
   Bell,
   Lock,
   FileSpreadsheet,
-  Zap,
 } from 'lucide-react';
 
 const FEATURE_GROUPS = [
@@ -28,8 +27,6 @@ const FEATURE_GROUPS = [
     title: 'Validation API',
     items: [
       { icon: Terminal, title: 'REST API', desc: 'Simple POST endpoint. Validate license + HWID in one call. Any language works.' },
-      { icon: Zap, title: 'Per-license rate limits', desc: 'Configurable validations per minute (1–100) per license.' },
-      { icon: Shield, title: 'IP rate limiting', desc: 'Protect the API from brute force and DDoS.' },
     ],
   },
   {

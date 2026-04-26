@@ -27,8 +27,8 @@ const FAQS = [
     a: 'Check app ID, API secret and license key. Ensure the key exists for that app and the secret matches the one in App Credentials.',
   },
   {
-    q: 'I get rate limited (429)',
-    a: 'IP limit is 100 requests/min. Per-license limit is configurable in App Settings (default 10/min). Wait and retry or increase the limit.',
+    q: 'I get 429 on validate',
+    a: 'You may have hit your plan’s monthly validate quota, or the server is temporarily throttling. Wait a bit and retry. If it persists, check Billing for quota or contact support.',
   },
   {
     q: 'Can I switch plans at any time?',

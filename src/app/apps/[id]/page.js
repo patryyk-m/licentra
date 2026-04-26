@@ -480,10 +480,6 @@ export default function AppDetailPage() {
                       <Label>validations per license per minute</Label>
                       <p className="text-sm">
                         <span className="font-medium tabular-nums">{app?.validationsPerMinutePerLicense ?? '—'}</span>
-                        <span className="text-muted-foreground"> — set by your subscription plan (server-side).</span>
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        free, pro, and business plans each have their own cap to protect platform capacity.
                       </p>
                     </div>
                     <div className="flex items-center space-x-2">

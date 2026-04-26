@@ -11,8 +11,8 @@ const UNLIMITED = { limit: 999999, windowMinutes: 1 };
 // production rate limits (owasp a02 security misconfiguration)
 const PROD_LIMITS = {
   auth: {
-    login: { limit: 5, windowMinutes: 15 },
-    register: { limit: 3, windowMinutes: 60 },
+    login: { limit: 10, windowMinutes: 15 },
+    register: { limit: 5, windowMinutes: 60 },
     refresh: { limit: 60, windowMinutes: 1 },
     logout: { limit: 30, windowMinutes: 1 },
     me: { limit: 180, windowMinutes: 1 },

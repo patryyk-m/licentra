@@ -10,6 +10,9 @@ import { clearAuthCookies, getAuthCookies, setAuthCookies } from '@/lib/auth-coo
 import { verifyRefreshToken, signAccessToken, signRefreshToken } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/ratelimit';
 import { getAuthRateLimit } from '@/lib/ratelimit';
+import { handleApiError, getClientIp, getUserAgent } from '@/lib/security';
+import SecurityLog from '@/models/SecurityLog';
+import { verifyPassword } from '@/lib/auth';
 
 export async function GET(req) {
   const rateLimitResponse = checkRateLimit(req, getAuthRateLimit('me'));
@@ -111,7 +114,6 @@ export async function GET(req) {
 
     return response;
   } catch (error) {
-    const { handleApiError } = await import('@/lib/security');
     return handleApiError(error, 'get_me');
   }
 }
@@ -158,7 +160,6 @@ export async function DELETE(req) {
       );
     }
 
-    const { verifyPassword } = await import('@/lib/auth');
     const isValidPassword = await verifyPassword(password, userDoc.passwordHash);
     if (!isValidPassword) {
       return NextResponse.json(
@@ -168,8 +169,6 @@ export async function DELETE(req) {
     }
 
     // log deletion request
-    const SecurityLog = (await import('@/models/SecurityLog')).default;
-    const { getClientIp, getUserAgent } = await import('@/lib/security');
     await SecurityLog.create({
       userId: user.id,
       event: 'account_deletion_requested',
@@ -214,7 +213,6 @@ export async function DELETE(req) {
 
     return response;
   } catch (error) {
-    const { handleApiError } = await import('@/lib/security');
     return handleApiError(error, 'delete_account');
   }
 }

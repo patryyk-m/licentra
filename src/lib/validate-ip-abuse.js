@@ -167,6 +167,14 @@ async function recordValidateStrikeAsync(ip, reason) {
       threshold,
       reason: reason || 'validate_abuse',
     });
+    logSecurityEvent(SECURITY_EVENTS.VALIDATE_IP_STRIKE, {
+      ip: n,
+      resource: '/api/licenses/validate',
+      reason: `${reason || 'validate_abuse'} (${doc.strikes}/${threshold})`,
+      strikeCount: doc.strikes,
+      strikeThreshold: threshold,
+      strikeWindowMs: windowMs,
+    }).catch(() => {});
   }
 
   if (doc.strikes < threshold) return;
