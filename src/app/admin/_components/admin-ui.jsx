@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 
 async function ensureStepUp() {
   const password = window.prompt('confirm password for this admin action');
@@ -28,6 +29,7 @@ async function ensureStepUp() {
 export function AdminNotesPanel({ targetType, targetId }) {
   const [notes, setNotes] = useState([]);
   const [note, setNote] = useState('');
+  const [showOnUserProfile, setShowOnUserProfile] = useState(targetType === 'user');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -42,6 +44,14 @@ export function AdminNotesPanel({ targetType, targetId }) {
 
   useEffect(() => {
     loadNotes();
+  }, [targetType, targetId]);
+
+  useEffect(() => {
+    if (targetType === 'user') {
+      setShowOnUserProfile(true);
+    } else {
+      setShowOnUserProfile(false);
+    }
   }, [targetType, targetId]);
 
   const addNote = async () => {
@@ -64,11 +74,12 @@ export function AdminNotesPanel({ targetType, targetId }) {
         return;
       }
 
+      const visibility = targetType === 'user' && showOnUserProfile ? 'user_visible' : 'internal';
       const res = await fetch('/api/admin/notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ targetType, targetId, note: note.trim() }),
+        body: JSON.stringify({ targetType, targetId, note: note.trim(), visibility }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.success) {
@@ -94,6 +105,11 @@ export function AdminNotesPanel({ targetType, targetId }) {
           ) : (
             notes.map((n) => (
               <div key={n.id} className="rounded-lg border p-3 text-sm">
+                {targetType === 'user' ? (
+                  <p className="text-xs text-muted-foreground mb-1">
+                    {n.visibility === 'user_visible' ? 'shown on user profile' : 'admin only (not on profile)'}
+                  </p>
+                ) : null}
                 <p>{n.note}</p>
                 <p className="text-muted-foreground mt-1 text-xs">
                   {n.createdAt ? new Date(n.createdAt).toLocaleString() : '-'}
@@ -102,6 +118,18 @@ export function AdminNotesPanel({ targetType, targetId }) {
             ))
           )}
         </div>
+        {targetType === 'user' ? (
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="admin-note-show-profile"
+              checked={showOnUserProfile}
+              onCheckedChange={(v) => setShowOnUserProfile(v === true)}
+            />
+            <Label htmlFor="admin-note-show-profile" className="text-sm font-normal cursor-pointer">
+              Show on user profile
+            </Label>
+          </div>
+        ) : null}
         <div className="flex gap-2">
           <Input
             value={note}
